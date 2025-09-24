@@ -9,7 +9,7 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../config/database';
+import { sequelize } from '../../config/database';
 import { User } from './User';
 
 export interface SubscriptionCheckAttributes extends Model<InferAttributes<SubscriptionCheck>, InferCreationAttributes<SubscriptionCheck>> {

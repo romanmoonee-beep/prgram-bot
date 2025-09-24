@@ -1,7 +1,7 @@
 // src/middlewares/auth.ts
 import { Context, NextFunction } from 'grammy';
-import { User } from '../models/User';
-import { logger } from '../utils/logger';
+import { User } from '../../database/models/User';
+import { logger } from '../../utils/logger';
 
 // Расширение типа Context для добавления session
 declare module 'grammy' {

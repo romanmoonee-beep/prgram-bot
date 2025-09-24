@@ -1,8 +1,8 @@
 // src/middlewares/rateLimit.ts
 import { Context, NextFunction } from 'grammy';
 import Redis from 'ioredis';
-import { logger } from '../utils/logger';
-import { config } from '../config';
+import { logger } from '../../utils/logger';
+import { config } from '../../config';
 
 // Создание Redis клиента
 const redis = new Redis(config.redis.url, {

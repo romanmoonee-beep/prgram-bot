@@ -9,10 +9,10 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../config/database';
+import { sequelize } from '../../config/database';
 import { User } from './User';
 import { Task } from './Task';
-import { TRANSACTION_TYPES } from '../utils/constants';
+import { TRANSACTION_TYPES } from '../../utils/constants';
 
 export interface TransactionAttributes extends Model<InferAttributes<Transaction>, InferCreationAttributes<Transaction>> {
   id: CreationOptional<number>;

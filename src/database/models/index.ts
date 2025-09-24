@@ -1,5 +1,5 @@
 // src/models/index.ts
-import { sequelize } from '../config/database';
+import { sequelize } from '../../config/database';
 
 // Импорт всех моделей
 import { User } from './User';

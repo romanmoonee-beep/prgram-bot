@@ -9,9 +9,9 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../config/database';
+import { sequelize } from '../../config/database';
 import { User } from './User';
-import { NOTIFICATION_TYPES } from '../utils/constants';
+import { NOTIFICATION_TYPES } from '../../utils/constants';
 
 export interface NotificationAttributes extends Model<InferAttributes<Notification>, InferCreationAttributes<Notification>> {
   id: CreationOptional<number>;

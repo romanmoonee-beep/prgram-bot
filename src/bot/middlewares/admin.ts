@@ -1,6 +1,6 @@
 // src/middlewares/admin.ts
 import { Context, NextFunction } from 'grammy';
-import { logger } from '../utils/logger';
+import { logger } from '../../utils/logger';
 
 // Middleware для проверки админских прав
 export function adminMiddleware(ctx: Context, next: NextFunction) {

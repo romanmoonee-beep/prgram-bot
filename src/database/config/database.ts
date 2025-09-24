@@ -2,7 +2,10 @@
 import { Sequelize } from 'sequelize';
 import dotenv from 'dotenv';
 
-dotenv.config();
+if (!process.env.BOT_TOKEN) {
+  const dotenv = require('dotenv');
+  dotenv.config();
+}
 
 // Конфигурация базы данных
 const config = {

@@ -9,9 +9,9 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../config/database';
+import { sequelize } from '../../config/database';
 import { User } from './User';
-import { TASK_TYPES, TASK_STATUSES } from '../utils/constants';
+import { TASK_TYPES, TASK_STATUSES } from '../../utils/constants';
 
 export interface TaskAttributes extends Model<InferAttributes<Task>, InferCreationAttributes<Task>> {
   id: CreationOptional<number>;

@@ -9,10 +9,10 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../config/database';
+import { sequelize } from '../../config/database';
 import { User } from './User';
 import { Task } from './Task';
-import { EXECUTION_STATUSES } from '../utils/constants';
+import { EXECUTION_STATUSES } from '../../utils/constants';
 
 export interface TaskExecutionAttributes extends Model<InferAttributes<TaskExecution>, InferCreationAttributes<TaskExecution>> {
   id: CreationOptional<number>;
