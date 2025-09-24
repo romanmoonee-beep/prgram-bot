@@ -1,6 +1,6 @@
 // src/utils/formatters.ts
-import { EMOJIS, TASK_TYPES, USER_LEVELS, TRANSACTION_TYPES } from './constants';
-import { formatGram, formatTimeAgo, formatTimeRemaining, createProgressBar, getLevelText, getLevelEmoji } from './helpers';
+import { EMOJIS, TASK_TYPES, USER_LEVELS, TRANSACTION_TYPES } from '../constants/index';
+import { formatGram, formatTimeAgo, formatTimeRemaining, createProgressBar, getLevelText, getLevelEmoji } from '../helpers/init';
 
 // Интерфейсы для типизации
 interface UserData {

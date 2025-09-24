@@ -3,7 +3,8 @@ import { Bot, Context } from 'grammy';
 import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS } from '../../utils/constants';
-import { getSubscriptionMainKeyboard, getBackKeyboard } from '../keyboards/main';
+import { getSubscriptionMainKeyboard } from '../keyboards/subscription';
+import { getBackKeyboard } from '../keyboards/main';
 import { SubscriptionCheck } from '../../database/models/SubscriptionCheck';
 import { User } from '../../database/models';
 
@@ -158,7 +159,10 @@ export function setupSubscriptionCheckHandlers(bot: Bot) {
   bot.callbackQuery(/^copy_user_id_(\d+)$/, requireAuth, async (ctx) => {
     try {
       const userId = ctx.match![1];
-      await ctx.answerCallbackQuery(`📋 ID скопирован: ${userId}`, { show_alert: true });
+      await ctx.answerCallbackQuery({
+        text: `📋 ID скопирован!\n${userId}`, 
+        show_alert: true
+      });
     } catch (error) {
       logger.error('Copy user ID error:', error);
       await ctx.answerCallbackQuery('Произошла ошибка');
@@ -188,7 +192,7 @@ export function setupSubscriptionCommands(bot: Bot) {
       }
 
       // Проверяем права пользователя
-      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
       if (!['creator', 'administrator'].includes(userMember.status)) {
         await ctx.reply('❌ Только администраторы могут настраивать проверку подписки.');
         return;
@@ -205,30 +209,38 @@ export function setupSubscriptionCommands(bot: Bot) {
       const timeStr = args[1];
 
       // Валидация канала
-      if (!targetChannel.startsWith('@')) {
+      if (!targetChannel?.startsWith('@')) {  // Добавьте ?. для безопасного вызова, если args[0] может быть undefined
         await ctx.reply('❌ Укажите канал в формате @channel_name');
         return;
       }
 
       // Парсинг времени
       let timerDuration: number | undefined;
-      if (timeStr) {
-        timerDuration = parseTimeString(timeStr);
-        if (timerDuration === null) {
-          await ctx.reply('❌ Неверный формат времени. Используйте: 30s, 5m, 2h, 1d');
-          return;
-        }
+      timerDuration = parseTimeString(timeStr) ?? undefined;  // Коэрс null в undefined
+      
+      if (timerDuration == null) {
+        await ctx.reply('❌ Неверный формат времени. Используйте: 30s, 5m, 2h, 1d');
+        return;
       }
 
       // Находим или создаем пользователя
-      let user = await User.findOne({ where: { telegramId: ctx.from.id } });
+      let user = null;
+      const from = ctx.from;
+
+      if (from) {
+        user = await User.findOne({ where: { telegramId: from.id } });
+      } else {
+        await ctx.reply('❌ Ошибка: Информация о пользователе недоступна. Попробуйте снова или свяжитесь с поддержкой.');
+        return; 
+      }
+
       if (!user) {
         user = await User.create({
-          telegramId: ctx.from.id,
-          username: ctx.from.username,
-          firstName: ctx.from.first_name,
-          lastName: ctx.from.last_name,
-          referralCode: ctx.from.id.toString()
+          telegramId: from.id,
+          username: from.username ?? '',
+          firstName: from.first_name ?? '',
+          lastName: from.last_name ?? '',
+          referralCode: from.id.toString(),
         });
       }
 
@@ -320,7 +332,7 @@ export function setupSubscriptionCommands(bot: Bot) {
         return;
       }
 
-      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
       if (!['creator', 'administrator'].includes(userMember.status)) {
         await ctx.reply('❌ Только администраторы могут управлять проверками подписки.');
         return;
@@ -413,7 +425,7 @@ export function setupSubscriptionCommands(bot: Bot) {
         return;
       }
 
-      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
       if (!['creator', 'administrator'].includes(userMember.status)) {
         await ctx.reply('❌ Только администраторы могут настраивать реферальную систему.');
         return;
@@ -443,23 +455,32 @@ export function setupSubscriptionCommands(bot: Bot) {
 
       // Парсинг времени
       let timerDuration: number | undefined;
-      if (timeStr) {
-        timerDuration = parseTimeString(timeStr);
-        if (timerDuration === null) {
-          await ctx.reply('❌ Неверный формат времени. Используйте: 30s, 5m, 2h, 1d');
-          return;
-        }
+      timerDuration = parseTimeString(timeStr) ?? undefined;  // Коэрс null в undefined
+
+      if (timerDuration == null) {
+        await ctx.reply('❌ Неверный формат времени. Используйте: 30s, 5m, 2h, 1d');
+        return;
       }
 
       // Находим или создаем пользователя-создателя
-      let creator = await User.findOne({ where: { telegramId: ctx.from.id } });
+
+      let creator = null;
+      const from = ctx.from;
+
+      if (from) {
+        creator = await User.findOne({ where: { telegramId: from.id } });
+      } else {
+        await ctx.reply('❌ Ошибка: Информация о пользователе недоступна. Попробуйте снова или свяжитесь с поддержкой.');
+        return; 
+      }
+
       if (!creator) {
         creator = await User.create({
-          telegramId: ctx.from.id,
-          username: ctx.from.username,
-          firstName: ctx.from.first_name,
-          lastName: ctx.from.last_name,
-          referralCode: ctx.from.id.toString()
+          telegramId: from.id,
+          username: from.username ?? '',
+          firstName: from.first_name ?? '',
+          lastName: from.last_name ?? '',
+          referralCode: from.id.toString(),
         });
       }
 
@@ -520,11 +541,11 @@ export function setupSubscriptionCommands(bot: Bot) {
         return;
       }
 
-      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
       if (!['creator', 'administrator'].includes(userMember.status)) {
         await ctx.reply('❌ Только администраторы могут управлять реферальной системой.');
         return;
-      }
+      } 
 
       const deletedCount = await SubscriptionCheck.destroy({
         where: {
@@ -554,7 +575,7 @@ export function setupSubscriptionCommands(bot: Bot) {
         return;
       }
 
-      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from.id);
+      const userMember = await ctx.api.getChatMember(ctx.chat.id, ctx.from!.id);
       if (!['creator', 'administrator'].includes(userMember.status)) {
         await ctx.reply('❌ Только администраторы могут настраивать автоудаление.');
         return;

@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger';
 import { config } from '../../config';
 
 // Создание Redis подключения для очередей
-const redis = new Redis(config.redis.url, {
+export const redis = new Redis(config.redis.url, {
   retryDelayOnFailover: 100,
   maxRetriesPerRequest: 3,
   lazyConnect: true

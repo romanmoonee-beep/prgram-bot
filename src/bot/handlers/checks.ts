@@ -7,6 +7,7 @@ import { getChecksKeyboard, getConfirmKeyboard, getBackKeyboard } from '../keybo
 import { validateCheckAmount, validateCheckActivations, validateCheckPassword } from '../../utils/validators/init';
 import { Check, CheckActivation, User, Transaction } from '../../database/models';
 
+
 interface CheckCreationState {
   type?: 'personal' | 'multi';
   totalAmount?: number;
@@ -18,7 +19,7 @@ interface CheckCreationState {
 }
 
 // Продолжение обработки создания чека
-async function askPersonalCheckRecipient(ctx: Context, user: User, data: CheckCreationState) {
+export async function askPersonalCheckRecipient(ctx: Context, user: User, data: CheckCreationState) {
   data.maxActivations = 1;
   user.currentState = JSON.stringify({ action: 'creating_personal_check', data });
   await user.save();
@@ -34,7 +35,7 @@ async function askPersonalCheckRecipient(ctx: Context, user: User, data: CheckCr
   await ctx.reply(message, { parse_mode: 'Markdown' });
 }
 
-async function askMultiCheckActivations(ctx: Context, user: User, data: CheckCreationState) {
+export async function askMultiCheckActivations(ctx: Context, user: User, data: CheckCreationState) {
   user.currentState = JSON.stringify({ action: 'creating_multi_check', data });
   await user.save();
 
@@ -47,7 +48,7 @@ async function askMultiCheckActivations(ctx: Context, user: User, data: CheckCre
   await ctx.reply(message, { parse_mode: 'Markdown' });
 }
 
-async function askCheckComment(ctx: Context, user: User, data: CheckCreationState, action: string) {
+export async function askCheckComment(ctx: Context, user: User, data: CheckCreationState, action: string) {
   user.currentState = JSON.stringify({ action, data });
   await user.save();
 
@@ -63,7 +64,7 @@ async function askCheckComment(ctx: Context, user: User, data: CheckCreationStat
   await ctx.reply(message, { parse_mode: 'Markdown' });
 }
 
-async function showCheckPreview(ctx: Context, user: User, data: CheckCreationState, action: string) {
+export async function showCheckPreview(ctx: Context, user: User, data: CheckCreationState, action: string) {
   const amountPerActivation = Math.floor(data.totalAmount! / data.maxActivations!);
   
   let message = `📋 **ПРЕДВАРИТЕЛЬНЫЙ ПРОСМОТР ЧЕКА**\n\n`;
@@ -108,7 +109,7 @@ async function showCheckPreview(ctx: Context, user: User, data: CheckCreationSta
   });
 }
 
-async function handleCheckActivation(ctx: Context, user: User, checkCode: string) {
+export async function handleCheckActivation(ctx: Context, user: User, checkCode: string) {
   try {
     const code = checkCode.toUpperCase().trim();
     
@@ -189,8 +190,9 @@ async function handleCheckActivation(ctx: Context, user: User, checkCode: string
           `📊 **Активаций:** ${check.currentActivations}/${check.maxActivations}`,
           { parse_mode: 'Markdown' }
         );
-      } catch (error) {
-        logger.warn('Failed to notify check creator:', error.message);
+      } catch (error: unknown) {
+        logger.error('Check activation error:', error);
+        await ctx.reply('❌ Произошла ошибка при активации чека');
       }
     }
 
@@ -368,4 +370,24 @@ function formatCheckMessage(check: Check): string {
   return message;
 }
 
-export { handleCheckCreation };
+export function setupChecksHandlers(bot: Bot) {
+  // Здесь логика для основных обработчиков чеков, например:
+  bot.callbackQuery('checks_menu', requireAuth, async (ctx) => {
+    // Код для меню чеков
+    await ctx.editMessageText('Меню чеков', { reply_markup: getChecksKeyboard() });
+  });
+  // Добавьте другие обработчики по необходимости
+}
+
+export function setupCheckTextHandlers(bot: Bot) {
+  // Здесь обработчики текстовых сообщений для чеков, например:
+  bot.on('message:text', requireAuth, async (ctx) => {
+    const user = ctx.session!.user!;
+    const state = JSON.parse(user.currentState || '{}');
+    if (state.action === 'creating_check') {
+      // Обработка ввода текста для создания чека
+    }
+  });
+}
+
+// export { handleCheckCreation };

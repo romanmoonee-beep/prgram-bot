@@ -77,7 +77,23 @@ export function setupPaymentHandlers(bot: Bot) {
 
       await ctx.answerCallbackQuery();
 
-      await bot.api.sendInvoice(user.telegramId, invoice);
+      await bot.api.sendInvoice(
+        user.id,                        // chat_id
+        invoice.title,                  // title
+        invoice.description,            // description
+        invoice.payload,                // payload
+        invoice.currency,               // currency
+        invoice.prices,                 // prices
+        {                               // other: объект с опциональными полями
+          need_name: invoice.need_name,
+          need_phone_number: invoice.need_phone_number,
+          need_email: invoice.need_email,
+          need_shipping_address: invoice.need_shipping_address,
+          send_phone_number_to_provider: invoice.send_phone_number_to_provider,
+          send_email_to_provider: invoice.send_email_to_provider,
+          is_flexible: invoice.is_flexible,
+        }
+      );
 
       logger.info(`Invoice sent to user ${user.telegramId} for ${starsAmount} stars`);
 

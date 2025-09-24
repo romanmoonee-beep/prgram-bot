@@ -1,5 +1,5 @@
 // src/utils/validators.ts
-import { REGEX, LIMITS, TASK_TYPES, USER_LEVELS } from './constants';
+import { REGEX, LIMITS, TASK_TYPES, USER_LEVELS } from '../constants';
 
 // Тип результата валидации
 export interface ValidationResult {

@@ -4,7 +4,6 @@ import { logger } from '../../utils/logger';
 
 // Импорт всех обработчиков
 import { setupStartHandler } from './start';
-import { setupCabinetHandlers } from './cabinet';
 import { setupEarnHandlers } from './earn';
 import { setupTaskExecutionHandlers } from './taskExecution';
 import { setupAdvertiseHandlers, setupTaskCreationTextHandlers, setupTaskCreationFinalHandlers } from './advertise';
@@ -234,12 +233,10 @@ export function setupErrorHandlers(bot: Bot) {
 }
 
 export default setupHandlers;// src/bot/handlers/cabinet.ts
-import { Bot, Context } from 'grammy';
 import { requireAuth } from '../middlewares/auth';
-import { logger } from '../../utils/logger';
 import { EMOJIS } from '../../utils/constants';
 import { getCabinetKeyboard, getPaginationKeyboard, getMainMenuKeyboard } from '../keyboards/main';
-import { formatUserProfile, formatUserStats } from '../../utils/formatters';
+import { formatUserProfile, formatUserStats } from '../../utils/formatters/init';
 import { Transaction, Task, Notification } from '../../database/models';
 
 export function setupCabinetHandlers(bot: Bot) {

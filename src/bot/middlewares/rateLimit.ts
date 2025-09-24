@@ -6,9 +6,14 @@ import { config } from '../../config';
 
 // Создание Redis клиента
 const redis = new Redis(config.redis.url, {
-  retryDelayOnFailover: 100,
   maxRetriesPerRequest: 3,
-  lazyConnect: true
+  lazyConnect: true,
+  retryStrategy: (times: number) => {
+    if (times > 3) {  // Stop after 3 retries
+      return null;
+    }
+    return Math.min(times * 100, 2000);  // Exponential backoff: 100ms, 200ms, 300ms, etc., capped at 2s
+  },
 });
 
 // Настройки rate limiting
@@ -37,53 +42,45 @@ export async function rateLimitMiddleware(ctx: Context, next: NextFunction) {
   try {
     // Используем Redis pipeline для атомарности
     const pipeline = redis.pipeline();
-    
-    // Увеличиваем счетчик
     pipeline.incr(key);
-    
-    // Устанавливаем TTL только если ключ новый
     pipeline.expire(key, RATE_LIMIT_WINDOW);
-    
-    const results = await pipeline.exec();
-    
-    if (!results || results.length < 1) {
-      logger.error('Redis pipeline failed for rate limiting');
-      return next(); // В случае ошибки Redis пропускаем проверку
-    }
+    pipeline.ttl(key);  // Добавляем для получения оставшегося времени
 
-    const count = results[0][1] as number;
+    const results = await pipeline.exec() as [[null, number], [null, number], [null, number]];
+
+    const count = results[0][1];  // Результат incr
 
     // Проверяем лимит
     if (count > MAX_REQUESTS_PER_WINDOW) {
-      // Получаем оставшееся время
-      const ttl = await redis.ttl(key);
-      
+      const ttl = results[2][1];  // Результат ttl (в секундах)
+
+      // Логируем превышение лимита
       logger.warn(`Rate limit exceeded for user ${userId}`, {
         count,
         timeRemaining: ttl
       });
 
+      // Guard для ctx.message
+      if (!ctx.message) {
+        return;  // Или лог/альтернатива
+      }
+
       try {
         await ctx.reply(
-          `⚠️ Превышен лимит запросов!\n\n` +
-          `Попробуйте снова через ${ttl} секунд.`,
-          { 
-            reply_parameters: { message_id: ctx.message?.message_id }
-          }
+          `Предупреждение: лимит запросов\nПодождите еще ${ttl} секунд.`,
+          { reply_parameters: { message_id: ctx.message.message_id } }
         );
       } catch (error) {
         logger.error('Failed to send rate limit message:', error);
       }
 
-      return; // Блокируем выполнение
+      return;  // Блокируем выполнение
     }
 
     return next();
-
   } catch (error) {
     logger.error('Rate limit middleware error:', error);
-    // В случае ошибки Redis пропускаем проверку
-    return next();
+    return next();  // Пропускаем при ошибке Redis
   }
 }
 

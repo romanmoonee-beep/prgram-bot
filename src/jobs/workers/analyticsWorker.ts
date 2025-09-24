@@ -3,7 +3,7 @@ import { Job } from 'bull';
 import { analyticsQueue, AnalyticsJob } from '../queues';
 import { User, Task, TaskExecution, Transaction } from '../../database/models';
 import { logger } from '../../utils/logger';
-import { redis } from '../queues';
+import { redis } from '../queues/index';
 
 // Worker для обработки аналитических данных
 class AnalyticsWorker {

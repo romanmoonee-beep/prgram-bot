@@ -74,7 +74,7 @@ export {
   getExportKeyboard,
   getExportFormatKeyboard,
   getQuickActionsKeyboard
-} from './actions';
+} from './action';
 
 // Вспомогательные функции для создания динамических клавиатур
 
@@ -268,4 +268,4 @@ export function createAdvancedPaginationKeyboard(
     buttons.push({ text: '⏮️', data: `${prefix}_page_1` });
   }
   
-  // Кнопка "Наз
+}

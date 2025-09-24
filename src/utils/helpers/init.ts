@@ -1,5 +1,5 @@
 // src/utils/helpers.ts
-import { REGEX, USER_LEVELS, EMOJIS } from './constants';
+import { REGEX, USER_LEVELS, EMOJIS } from '../constants/index';
 
 // Функция для форматирования числа с разделителями
 export function formatNumber(num: number): string {

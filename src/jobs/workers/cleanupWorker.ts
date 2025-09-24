@@ -118,10 +118,10 @@ class CleanupWorker {
         const { files, size } = await this.cleanupDirectory(tempDir, 24 * 60 * 60 * 1000); // 24 часа
         totalFiles += files;
         totalSize += size;
-      } catch (error) {
+      } catch (error: unknown) {
         // Директория может не существовать
-        if (error.code !== 'ENOENT') {
-          logger.warn(`Failed to cleanup directory ${tempDir}:`, error.message);
+        if (error !== 'ENOENT') {
+          logger.warn(`Failed to cleanup directory ${tempDir}:`, error);
         }
       }
     }
@@ -136,8 +136,8 @@ class CleanupWorker {
       );
       totalFiles += logFiles;
       totalSize += logSize;
-    } catch (error) {
-      logger.warn('Failed to cleanup old logs:', error.message);
+    } catch (error: unknown) {
+      logger.warn('Failed to cleanup old logs:', error);
     }
     
     logger.info(`Cleaned up ${totalFiles} temp files, freed ${Math.round(totalSize / 1024 / 1024)} MB`);
@@ -171,8 +171,8 @@ class CleanupWorker {
             freedSize += stats.size;
           }
         }
-      } catch (error) {
-        logger.warn(`Failed to process file ${filePath}:`, error.message);
+      } catch (error: unknown) {
+        logger.warn(`Failed to process file ${filePath}:`, error);
       }
     }
     

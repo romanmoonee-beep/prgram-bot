@@ -254,25 +254,3 @@ export function getQuickActionsKeyboard() {
     .text(`📊 Моя статистика`, 'quick_my_stats')
     .text(`💰 Пополнить баланс`, 'quick_deposit').row();
 }
-
-// Экспорт всех клавиатур
-export {
-  getStarsPaymentKeyboard,
-  getTaskSortKeyboard,
-  getTaskFiltersKeyboard,
-  getTaskConfirmKeyboard,
-  getManualTaskKeyboard,
-  getPeriodKeyboard,
-  getTaskManageKeyboard,
-  getTaskSettingsKeyboard,
-  getTaskReportKeyboard,
-  getCheckTypeKeyboard,
-  getCheckAdvancedKeyboard,
-  getCheckManageKeyboard,
-  getCheckActivationKeyboard,
-  getReferralActionsKeyboard,
-  getReferralPromoKeyboard,
-  getExportKeyboard,
-  getExportFormatKeyboard,
-  getQuickActionsKeyboard
-};

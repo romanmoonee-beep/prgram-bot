@@ -203,24 +203,3 @@ export function getStatsKeyboard() {
     .text(`📈 Сравнить периоды`, 'stats_compare').row()
     .text(`${EMOJIS.back} Назад`, 'cabinet_stats');
 }
-
-// Экспорт всех клавиатур
-export {
-  getSubscriptionCheckKeyboard,
-  getNotificationSettingsKeyboard,
-  getDepositKeyboard,
-  getAdminPanelKeyboard,
-  getUserManagementKeyboard,
-  getTaskManagementKeyboard,
-  getFinanceKeyboard,
-  getBroadcastKeyboard,
-  getSystemSettingsKeyboard,
-  getMaintenanceKeyboard,
-  getCriticalConfirmKeyboard,
-  getPrivacyKeyboard,
-  getLanguageKeyboard,
-  getTaskModerationKeyboard,
-  getRejectionReasonKeyboard,
-  getBroadcastTypeKeyboard,
-  getStatsKeyboard
-};

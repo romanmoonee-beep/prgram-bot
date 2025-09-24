@@ -4,7 +4,7 @@ import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS, TASK_TYPES, LIMITS } from '../../utils/constants';
 import { getAdvertiseKeyboard, getConfirmKeyboard, getBackKeyboard } from '../keyboards/main';
-import { validateTelegramLink, validatePostLink } from '../../utils/validators';
+import { validateTelegramLink, validatePostLink } from '../../utils/validators/init';
 import { Task, User } from '../../database/models';
 
 interface TaskCreationState {

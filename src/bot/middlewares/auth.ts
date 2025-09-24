@@ -154,7 +154,7 @@ async function handleReferralForNewUser(ctx: Context, user: User) {
           await referrer.save();
 
           // Создаем транзакцию
-          const { Transaction } = await import('../models/Transaction');
+          const { Transaction } = await import('../../database/models/Transaction');
           await Transaction.createReferralBonus(
             referrer.id,
             user.id,
@@ -163,7 +163,7 @@ async function handleReferralForNewUser(ctx: Context, user: User) {
           );
 
           // Создаем уведомление рефереру
-          const { Notification } = await import('../models/Notification');
+          const { Notification } = await import('../../database/models/Notification');
           await Notification.createReferralJoined(
             referrer.id,
             user.getDisplayName(),

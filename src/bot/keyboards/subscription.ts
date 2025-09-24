@@ -148,20 +148,3 @@ export function getReferralOPSetupKeyboard() {
     .text(`⚙️ Настройки проверки`, 'referral_op_settings')
     .text(`${EMOJIS.back} Назад`, 'subscription_referral_prgram');
 }
-
-// Экспорт всех клавиатур
-export {
-  getSubscriptionMainKeyboard,
-  getPublicSubscriptionKeyboard,
-  getPrivateSubscriptionKeyboard,
-  getInviteLinkSubscriptionKeyboard,
-  getReferralSubscriptionKeyboard,
-  getAutoDeleteKeyboard,
-  getSubscriptionStatsKeyboard,
-  getAutoDeleteTimeKeyboard,
-  getSubscriptionExamplesKeyboard,
-  getSubscriptionManageKeyboard,
-  getDeleteSubscriptionKeyboard,
-  getSubscriptionHelpKeyboard,
-  getReferralOPSetupKeyboard
-};

@@ -588,9 +588,9 @@ export function setupAdminHandlers(bot: Bot) {
             try {
               await ctx.api.sendMessage(user.telegramId, broadcastText, { parse_mode: 'Markdown' });
               sent++;
-            } catch (error) {
+            } catch (error: unknown) {
               failed++;
-              logger.warn(`Broadcast failed for user ${user.telegramId}:`, error.message);
+              logger.warn(`Broadcast failed for user ${user.telegramId}:`, error);
             }
           })
         );

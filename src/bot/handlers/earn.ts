@@ -4,7 +4,7 @@ import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS, TASK_TYPES, TASK_STATUSES } from '../../utils/constants';
 import { getEarnKeyboard, getPaginationKeyboard, getConfirmKeyboard } from '../keyboards/main';
-import { formatTaskListItem } from '../../utils/formatters/init';
+import { formatTimeRemaining } from '../../utils/helpers/init';
 import { Task, TaskExecution, User } from '../../database/models';
 import { Op } from 'sequelize';
 
@@ -375,3 +375,4 @@ export function setupEarnHandlers(bot: Bot) {
       await ctx.answerCallbackQuery('Произошла ошибка');
     }
   });
+}

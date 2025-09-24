@@ -107,7 +107,11 @@ export function setupReferralsHandlers(bot: Bot) {
       const user = ctx.session!.user!;
       const referralLink = `https://t.me/${ctx.me.username}?start=${user.telegramId}`;
       
-      await ctx.answerCallbackQuery(`📋 Ссылка скопирована!\n${referralLink}`, { show_alert: true });
+      await ctx.answerCallbackQuery({
+        text: `Ссылка скопирована!!\n${referralLink}`, 
+        show_alert: true
+      });
+      
     } catch (error) {
       logger.error('Copy referral link error:', error);
       await ctx.answerCallbackQuery('Произошла ошибка');

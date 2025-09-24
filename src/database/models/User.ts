@@ -19,7 +19,8 @@ export interface UserAttributes extends Model<InferAttributes<User>, InferCreati
   firstName?: string;
   lastName?: string;
   languageCode?: string;
-  
+  currentState?: string | null;
+
   // Баланс и уровень
   balance: CreationOptional<number>;
   frozenBalance: CreationOptional<number>;
@@ -64,7 +65,8 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
   declare firstName?: string;
   declare lastName?: string;
   declare languageCode?: string;
-  
+  declare currentState?: string | null;
+
   declare balance: CreationOptional<number>;
   declare frozenBalance: CreationOptional<number>;
   declare level: CreationOptional<string>;
@@ -335,6 +337,11 @@ User.init(
       allowNull: false,
       defaultValue: DataTypes.NOW,
     },
+    currentState: {
+      type: DataTypes.STRING(1024),
+      allowNull: true,
+      defaultValue: null
+    }
   },
   {
     sequelize,

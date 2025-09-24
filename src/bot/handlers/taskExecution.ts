@@ -4,7 +4,7 @@ import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS, TASK_TYPES, EXECUTION_STATUSES } from '../../utils/constants';
 import { getConfirmKeyboard, getBackKeyboard } from '../keyboards/main';
-import { formatTimeRemaining } from '../../utils/formatters/init';
+import { formatTimeRemaining } from '../../utils/helpers/init';
 import { Task, TaskExecution, User } from '../../database/models';
 import { QueueManager } from '../../jobs/queues';
 
