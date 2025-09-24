@@ -1,5 +1,4 @@
-// src/models/index.ts
-import { sequelize } from '../../config/database';
+import { sequelize } from '../config/database';
 
 // Импорт всех моделей
 import { User } from './User';
@@ -8,6 +7,8 @@ import { TaskExecution } from './TaskExecution';
 import { Transaction } from './Transaction';
 import { Check, CheckActivation } from './Check';
 import { Notification } from './Notification';
+import { SubscriptionCheck } from './SubscriptionCheck';
+import { Op } from 'sequelize';
 
 // Экспорт моделей
 export {
@@ -17,7 +18,8 @@ export {
   Transaction,
   Check,
   CheckActivation,
-  Notification
+  Notification,
+  SubscriptionCheck
 };
 
 // Экспорт экземпляра sequelize
@@ -31,7 +33,8 @@ export const models = {
   Transaction,
   Check,
   CheckActivation,
-  Notification
+  Notification,
+  SubscriptionCheck
 };
 
 // Функция для инициализации всех ассоциаций
@@ -77,7 +80,7 @@ export async function createIndexes() {
     `);
     
     console.log('✅ Additional indexes created successfully');
-  } catch (error) {
+  } catch (error: any) {
     console.warn('⚠️ Some indexes might already exist:', error.message);
   }
 }
@@ -92,7 +95,7 @@ export async function createExtensions() {
     await sequelize.query('CREATE EXTENSION IF NOT EXISTS "uuid-ossp";');
     
     console.log('✅ PostgreSQL extensions created successfully');
-  } catch (error) {
+  } catch (error: any) {
     console.warn('⚠️ Some extensions might already exist:', error.message);
   }
 }
@@ -151,55 +154,43 @@ export async function cleanupOldData() {
   try {
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    
+
     // Удаление старых уведомлений
     const deletedNotifications = await Notification.destroy({
       where: {
         createdAt: {
-          [sequelize.Sequelize.Op.lt]: thirtyDaysAgo
+          [Op.lt]: thirtyDaysAgo,
         },
-        isRead: true
-      }
+        isRead: true,
+      },
     });
-    
+
     // Удаление истекших чеков
     const deletedChecks = await Check.destroy({
       where: {
         expiresAt: {
-          [sequelize.Sequelize.Op.lt]: now
+          [Op.lt]: now,
         },
-        isActive: false
-      }
+        isActive: false,
+      },
     });
-    
+
     // Деактивация просроченных заданий
     const expiredTasks = await Task.update(
       { status: 'expired' },
       {
         where: {
           expiresAt: {
-            [sequelize.Sequelize.Op.lt]: now
+            [Op.lt]: now,
           },
-          status: 'active'
-        }
+          status: 'active',
+        },
       }
     );
-    
-    console.log(`✅ Cleanup completed:
-      - Deleted ${deletedNotifications} old notifications
-      - Deleted ${deletedChecks} expired checks  
-      - Expired ${expiredTasks[0]} tasks`);
-      
-    return {
-      deletedNotifications,
-      deletedChecks,
-      expiredTasks: expiredTasks[0]
-    };
-    
-  } catch (error) {
-    console.error('❌ Cleanup failed:', error);
-    throw error;
+
+    console.log('✅ Cleanup completed');
+  } catch (err) {
+    console.error('❌ Cleanup failed:', err);
   }
 }
 

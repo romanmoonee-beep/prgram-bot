@@ -7,9 +7,10 @@ import {
   InferCreationAttributes,
   ForeignKey,
   NonAttribute,
-  Association
+  Association,
+  Op
 } from 'sequelize';
-import { sequelize } from '../../config/database';
+import { sequelize } from '../config/database';
 import { User } from './User';
 import { NOTIFICATION_TYPES } from '../../utils/constants';
 
@@ -221,14 +222,15 @@ export class Notification extends Model<InferAttributes<Notification>, InferCrea
     });
   }
 
-  static async cleanupExpired(): Promise<number> {
+  static async CleanupExpired(): Promise<number> {
     const count = await Notification.destroy({
       where: {
         expiresAt: {
-          [sequelize.Sequelize.Op.lte]: new Date()
-        }
-      }
+          [Op.lte]: new Date(),
+        },
+      },
     });
+
     return count;
   }
 }
@@ -355,4 +357,4 @@ User.hasMany(Notification, {
   foreignKey: 'userId'
 });
 
-export { Notification };
+// export { Notification };

@@ -4,7 +4,7 @@ import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS, TASK_TYPES, TASK_STATUSES } from '../../utils/constants';
 import { getEarnKeyboard, getPaginationKeyboard, getConfirmKeyboard } from '../keyboards/main';
-import { formatTaskListItem } from '../../utils/formatters';
+import { formatTaskListItem } from '../../utils/formatters/init';
 import { Task, TaskExecution, User } from '../../database/models';
 import { Op } from 'sequelize';
 

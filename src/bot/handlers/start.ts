@@ -4,7 +4,7 @@ import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS } from '../../utils/constants';
 import { getMainMenuKeyboard } from '../keyboards/main';
-import { formatUserProfile } from '../../utils/formatters';
+import { formatUserProfile } from '../../utils/formatters/init';
 
 // Стартовое сообщение для новых пользователей
 const WELCOME_MESSAGE = `${EMOJIS.star} **Добро пожаловать в PR GRAM Bot!**

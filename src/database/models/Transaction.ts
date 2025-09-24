@@ -9,7 +9,7 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../../config/database';
+import { sequelize } from '../config/database';
 import { User } from './User';
 import { Task } from './Task';
 import { TRANSACTION_TYPES } from '../../utils/constants';
@@ -427,4 +427,4 @@ Task.hasMany(Transaction, {
   foreignKey: 'relatedTaskId'
 });
 
-export { Transaction };
+// export { Transaction };

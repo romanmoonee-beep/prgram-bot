@@ -12,7 +12,8 @@ export const EMOJIS = {
   cross: '❌',
   warning: '⚠️',
   info: 'ℹ️',
-  
+  back: '«',
+
   // Уровни пользователей
   bronze: '🥉',
   silver: '🥈',
@@ -247,22 +248,3 @@ export default {
   LIMITS,
   TIME
 };
-
-export const TIME = {
-  SECOND: 1000,
-  MINUTE: 60 * 1000,
-  HOUR: 60 * 60 * 1000,
-  DAY: 24 * 60 * 60 * 1000,
-  WEEK: 7 * 24 * 60 * 60 * 1000,
-  MONTH: 30 * 24 * 60 * 60 * 1000,
-  
-  // Таймауты
-  TASK_AUTO_APPROVE: 24 * 60 * 60 * 1000, // 24 часа
-  SUBSCRIPTION_CHECK_DELAY: 30 * 1000, // 30 секунд
-  RATE_LIMIT_WINDOW: 60 * 1000, // 1 минута
-  
-  // Интервалы проверок
-  CHECK_SUBSCRIPTIONS_INTERVAL: 5 * 60 * 1000, // 5 минут
-  CLEANUP_INTERVAL: 60 * 60 * 1000, // 1 час
-  STATS_UPDATE_INTERVAL: 10 * 60 * 1000 // 10 минут
-} as const;

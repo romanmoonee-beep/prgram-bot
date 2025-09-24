@@ -9,7 +9,7 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../../config/database';
+import { sequelize } from '../config/database';
 import { USER_LEVELS } from '../../utils/constants';
 
 export interface UserAttributes extends Model<InferAttributes<User>, InferCreationAttributes<User>> {
@@ -202,3 +202,143 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
     this.lastActiveAt = new Date();
     await this.save();
   }
+}
+
+User.init(
+  {
+    id: {
+      type: DataTypes.INTEGER,
+      primaryKey: true,
+      autoIncrement: true,
+    },
+    telegramId: {
+      type: DataTypes.BIGINT,
+      allowNull: false,
+      unique: true,
+    },
+    username: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    firstName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    lastName: {
+      type: DataTypes.STRING,
+      allowNull: true,
+    },
+    languageCode: {
+      type: DataTypes.STRING(10),
+      allowNull: true,
+    },
+
+    balance: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    frozenBalance: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    level: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      defaultValue: 'bronze',
+    },
+    totalEarned: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    totalSpent: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+
+    tasksCompleted: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    tasksCreated: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    referralsCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+    premiumReferralsCount: {
+      type: DataTypes.INTEGER,
+      allowNull: false,
+      defaultValue: 0,
+    },
+
+    referrerId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+    },
+    referralCode: {
+      type: DataTypes.STRING,
+      allowNull: false,
+      unique: true,
+    },
+
+    isActive: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: true,
+    },
+    isBanned: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    isPremium: {
+      type: DataTypes.BOOLEAN,
+      allowNull: false,
+      defaultValue: false,
+    },
+    premiumExpiresAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+
+    notificationSettings: {
+      type: DataTypes.JSONB,
+      allowNull: false,
+      defaultValue: {},
+    },
+
+    lastActiveAt: {
+      type: DataTypes.DATE,
+      allowNull: true,
+    },
+    registeredAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    createdAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+    updatedAt: {
+      type: DataTypes.DATE,
+      allowNull: false,
+      defaultValue: DataTypes.NOW,
+    },
+  },
+  {
+    sequelize,
+    tableName: 'users',
+    modelName: 'User',
+  }
+);

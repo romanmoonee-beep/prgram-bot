@@ -4,7 +4,7 @@ import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS } from '../../utils/constants';
 import { getReferralsKeyboard, getPaginationKeyboard, getBackKeyboard } from '../keyboards/main';
-import { formatReferralStats } from '../../utils/formatters';
+import { formatReferralStats } from '../../utils/formatters/init';
 import { User, Transaction } from '../../database/models';
 import { Op } from 'sequelize';
 

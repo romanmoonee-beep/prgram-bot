@@ -9,7 +9,7 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../../config/database';
+import { sequelize } from '../config/database';
 import { User } from './User';
 import { Task } from './Task';
 import { EXECUTION_STATUSES } from '../../utils/constants';
@@ -355,4 +355,4 @@ User.hasMany(TaskExecution, {
   foreignKey: 'checkedById'
 });
 
-export { TaskExecution };
+// export { TaskExecution };

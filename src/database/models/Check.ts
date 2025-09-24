@@ -9,7 +9,7 @@ import {
   NonAttribute,
   Association
 } from 'sequelize';
-import { sequelize } from '../../config/database';
+import { sequelize } from '../config/database';
 import { User } from './User';
 import crypto from 'crypto';
 
@@ -446,4 +446,4 @@ User.hasMany(CheckActivation, {
   foreignKey: 'userId'
 });
 
-export { Check, CheckActivation };
+// export { Check, CheckActivation };

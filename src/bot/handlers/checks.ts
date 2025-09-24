@@ -4,7 +4,7 @@ import { requireAuth } from '../middlewares/auth';
 import { logger } from '../../utils/logger';
 import { EMOJIS, LIMITS } from '../../utils/constants';
 import { getChecksKeyboard, getConfirmKeyboard, getBackKeyboard } from '../keyboards/main';
-import { validateCheckAmount, validateCheckActivations, validateCheckPassword } from '../../utils/validators';
+import { validateCheckAmount, validateCheckActivations, validateCheckPassword } from '../../utils/validators/init';
 import { Check, CheckActivation, User, Transaction } from '../../database/models';
 
 interface CheckCreationState {
