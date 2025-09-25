@@ -349,3 +349,15 @@ User.init(
     modelName: 'User',
   }
 );
+
+User.belongsTo(User, {
+  as: 'referrer',
+  foreignKey: 'referrerId'
+});
+
+User.hasMany(User, {
+  as: 'referrals',
+  foreignKey: 'referrerId'
+});
+
+export { User };
