@@ -1,233 +1,315 @@
 // src/jobs/queues/index.ts
 import Queue from 'bull';
-import Redis from 'ioredis';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
-
-// Создание Redis подключения для очередей
-export const redis = new Redis(config.redis.url, {
-  retryDelayOnFailover: 100,
-  maxRetriesPerRequest: 3,
-  lazyConnect: true
-});
-
-// Конфигурация очередей
-const queueConfig = {
-  redis: {
-    port: redis.options.port,
-    host: redis.options.host,
-    password: redis.options.password,
-    db: redis.options.db || 0
-  },
-  defaultJobOptions: {
-    removeOnComplete: 50, // Оставлять последние 50 завершенных заданий
-    removeOnFail: 100,    // Оставлять последние 100 неудачных заданий
-    attempts: 3,          // Количество попыток
-    backoff: {
-      type: 'exponential',
-      delay: 2000,
-    },
-  },
-  settings: {
-    stalledInterval: 30 * 1000,    // 30 секунд
-    maxStalledCount: 1,
-    retryProcessDelay: 5 * 1000,   // 5 секунд
-  }
-};
+import { TaskExecution, User, Task } from '../../database/models';
+import { telegramService } from '../../services/telegram';
 
 // Создание очередей
-export const taskCheckQueue = new Queue('task-check', queueConfig);
-export const notificationQueue = new Queue('notifications', queueConfig);
-export const telegramApiQueue = new Queue('telegram-api', queueConfig);
-export const analyticsQueue = new Queue('analytics', queueConfig);
-export const cleanupQueue = new Queue('cleanup', queueConfig);
-export const emailQueue = new Queue('email', queueConfig);
+const taskCheckQueue = new Queue('task check', config.redis.url);
+const notificationQueue = new Queue('notifications', config.redis.url);
+const cleanupQueue = new Queue('cleanup', config.redis.url);
 
-// Типы заданий для очередей
-export interface TaskCheckJob {
-  taskExecutionId: number;
-  userId: number;
-  taskId: number;
-  checkType: 'subscription' | 'membership' | 'reaction' | 'view';
-  targetUrl: string;
-}
-
-export interface NotificationJob {
-  userId: number;
-  type: string;
-  title: string;
-  message: string;
-  data?: Record<string, any>;
-  priority?: number;
-}
-
-export interface TelegramApiJob {
-  action: 'send_message' | 'check_subscription' | 'get_chat_member' | 'get_chat';
-  data: Record<string, any>;
-  userId?: number;
-  chatId?: number;
-}
-
-export interface AnalyticsJob {
-  type: 'user_action' | 'task_stats' | 'system_stats';
-  data: Record<string, any>;
-  userId?: number;
-}
-
-export interface CleanupJob {
-  type: 'old_data' | 'temp_files' | 'expired_sessions';
-  olderThan?: Date;
-}
-
-// Добавление заданий в очереди
 export class QueueManager {
-  // Добавить задание на проверку выполнения
-  static async addTaskCheck(job: TaskCheckJob, delay?: number) {
-    return await taskCheckQueue.add('check-task-execution', job, {
+  
+  // Добавить задачу на проверку выполнения задания
+  static async addTaskCheck(data: {
+    taskExecutionId: number;
+    userId: number;
+    taskId: number;
+    checkType: 'subscription' | 'membership' | 'reaction' | 'view';
+    targetUrl: string;
+  }, delay: number = 0) {
+    return await taskCheckQueue.add('check-task-execution', data, {
       delay,
-      priority: 5,
-      attempts: 3
+      attempts: 3,
+      backoff: 'exponential'
     });
   }
 
-  // Добавить уведомление
-  static async addNotification(job: NotificationJob, delay?: number) {
-    const priority = job.priority || 1;
-    return await notificationQueue.add('send-notification', job, {
+  // Добавить задачу на отправку уведомления
+  static async addNotification(data: {
+    userId: number;
+    message: string;
+    type: 'info' | 'success' | 'warning' | 'error';
+  }, delay: number = 0) {
+    return await notificationQueue.add('send-notification', data, {
       delay,
-      priority: priority * 10, // Bull использует более высокие числа для высокого приоритета
-      attempts: 2
+      attempts: 2,
+      backoff: 'fixed'
     });
   }
 
-  // Добавить Telegram API запрос
-  static async addTelegramApi(job: TelegramApiJob, delay?: number) {
-    return await telegramApiQueue.add('telegram-request', job, {
-      delay,
-      priority: 8,
-      attempts: 5,
-      backoff: {
-        type: 'exponential',
-        delay: 1000,
+  // Добавить задачу на очистку данных
+  static async addCleanupTask(data: {
+    type: 'expired_tasks' | 'old_notifications' | 'inactive_checks';
+  }) {
+    return await cleanupQueue.add('cleanup-data', data, {
+      attempts: 1
+    });
+  }
+
+  // Инициализация обработчиков очередей
+  static initialize() {
+    this.setupTaskCheckProcessor();
+    this.setupNotificationProcessor();
+    this.setupCleanupProcessor();
+    this.setupErrorHandlers();
+    
+    logger.info('✅ Queue Manager initialized');
+  }
+
+  private static setupTaskCheckProcessor() {
+    taskCheckQueue.process('check-task-execution', async (job) => {
+      const { taskExecutionId, userId, taskId, checkType, targetUrl } = job.data;
+      
+      try {
+        logger.info(`Processing task check for execution ${taskExecutionId}`);
+
+        const execution = await TaskExecution.findByPk(taskExecutionId, {
+          include: [
+            { model: Task, as: 'task' },
+            { model: User, as: 'user' }
+          ]
+        });
+
+        if (!execution) {
+          throw new Error('Task execution not found');
+        }
+
+        if (!execution.canBeAutoChecked()) {
+          logger.warn(`Task execution ${taskExecutionId} cannot be auto-checked`);
+          return { success: false, reason: 'Cannot be auto-checked' };
+        }
+
+        // Увеличиваем счетчик попыток
+        await execution.incrementAutoCheckAttempts();
+
+        let checkResult = false;
+        let resultDetails: any = {};
+
+        // Выполняем проверку в зависимости от типа
+        switch (checkType) {
+          case 'subscription':
+            checkResult = await telegramService.checkUserSubscription(userId, targetUrl);
+            resultDetails = { type: 'subscription', targetUrl };
+            break;
+            
+          case 'membership':
+            checkResult = await telegramService.checkUserMembership(userId, targetUrl);
+            resultDetails = { type: 'membership', targetUrl };
+            break;
+            
+          case 'reaction':
+            checkResult = await telegramService.checkUserReaction(userId, targetUrl);
+            resultDetails = { type: 'reaction', targetUrl };
+            break;
+            
+          case 'view':
+            // Для просмотров считаем что задание выполнено (проверить реально нельзя)
+            checkResult = true;
+            resultDetails = { type: 'view', assumed: true };
+            break;
+        }
+
+        // Сохраняем результат проверки
+        execution.autoCheckResult = {
+          ...resultDetails,
+          timestamp: new Date().toISOString(),
+          success: checkResult
+        };
+
+        if (checkResult) {
+          // Задание выполнено успешно
+          await execution.autoApprove();
+
+          if (execution.user) {
+            // Начисляем награду
+            await execution.user.updateBalance(execution.rewardAmount, 'add');
+            
+            // Создаем транзакцию
+            const { Transaction } = await import('../../database/models');
+            await Transaction.createTaskReward(
+              execution.user.id,
+              execution.task!.id,
+              execution.rewardAmount,
+              (execution.user.balance || 0) - execution.rewardAmount
+            );
+
+            // Обновляем статистику
+            await execution.task!.incrementConversions();
+            execution.user.tasksCompleted = (execution.user.tasksCompleted || 0) + 1;
+            await execution.user.save();
+
+            // Помечаем как оплаченное
+            await execution.markRewardPaid();
+
+            // Добавляем уведомление в очередь
+            await QueueManager.addNotification({
+              userId: execution.user.id,
+              message: `✅ Задание "${execution.task!.title}" выполнено! Получено ${execution.rewardAmount} GRAM`,
+              type: 'success'
+            });
+          }
+
+          logger.info(`Task execution ${taskExecutionId} auto-approved`);
+          return { success: true, approved: true };
+
+        } else {
+          // Проверка не прошла
+          if ((execution.autoCheckAttempts || 0) >= 3) {
+            // Максимум попыток исчерпан - отклоняем
+            await execution.reject('Автоматическая проверка не прошла после 3 попыток');
+            
+            if (execution.user) {
+              await QueueManager.addNotification({
+                userId: execution.user.id,
+                message: `❌ Задание "${execution.task!.title}" отклонено: не прошло автоматическую проверку`,
+                type: 'error'
+              });
+            }
+
+            logger.warn(`Task execution ${taskExecutionId} rejected after max attempts`);
+            return { success: true, rejected: true };
+          } else {
+            // Запланируем повторную проверку через 30 секунд
+            await QueueManager.addTaskCheck(job.data, 30000);
+            
+            logger.info(`Task execution ${taskExecutionId} will be rechecked`);
+            return { success: true, retrying: true };
+          }
+        }
+
+      } catch (error) {
+        logger.error(`Task check job failed for execution ${taskExecutionId}:`, error);
+        throw error;
       }
     });
   }
 
-  // Добавить аналитику
-  static async addAnalytics(job: AnalyticsJob, delay?: number) {
-    return await analyticsQueue.add('process-analytics', job, {
-      delay,
-      priority: 1,
-      attempts: 2
+  private static setupNotificationProcessor() {
+    notificationQueue.process('send-notification', async (job) => {
+      const { userId, message, type } = job.data;
+      
+      try {
+        const user = await User.findByPk(userId);
+        if (!user) {
+          throw new Error('User not found');
+        }
+
+        // Отправляем уведомление через Telegram (если пользователь разрешил)
+        const settings = user.notificationSettings as any || {};
+        if (settings.systemMessages !== false) {
+          // Здесь должна быть отправка через Telegram API
+          // Пока просто логируем
+          logger.info(`Notification sent to user ${userId}: ${message}`);
+        }
+
+        return { success: true };
+      } catch (error) {
+        logger.error(`Notification job failed for user ${userId}:`, error);
+        throw error;
+      }
     });
   }
 
-  // Добавить задание очистки
-  static async addCleanup(job: CleanupJob, delay?: number) {
-    return await cleanupQueue.add('cleanup-data', job, {
-      delay,
-      priority: 2,
-      attempts: 1
+  private static setupCleanupProcessor() {
+    cleanupQueue.process('cleanup-data', async (job) => {
+      const { type } = job.data;
+      
+      try {
+        const { cleanupOldData } = await import('../../database/models');
+        
+        switch (type) {
+          case 'expired_tasks':
+            // Помечаем истекшие задания как expired
+            await Task.update(
+              { status: 'expired' },
+              { where: { expiresAt: { [Op.lt]: new Date() }, status: 'active' } }
+            );
+            break;
+            
+          case 'old_notifications':
+            await cleanupOldData();
+            break;
+            
+          case 'inactive_checks':
+            // Деактивируем старые неиспользуемые чеки
+            const { Check } = await import('../../database/models');
+            await Check.update(
+              { isActive: false },
+              { 
+                where: { 
+                  expiresAt: { [Op.lt]: new Date() },
+                  isActive: true,
+                  currentActivations: 0
+                }
+              }
+            );
+            break;
+        }
+
+        return { success: true, type };
+      } catch (error) {
+        logger.error(`Cleanup job failed for type ${type}:`, error);
+        throw error;
+      }
+    });
+  }
+
+  private static setupErrorHandlers() {
+    // Обработка ошибок для всех очередей
+    [taskCheckQueue, notificationQueue, cleanupQueue].forEach(queue => {
+      queue.on('error', (error) => {
+        logger.error(`Queue ${queue.name} error:`, error);
+      });
+
+      queue.on('failed', (job, err) => {
+        logger.error(`Queue ${queue.name} job ${job.id} failed:`, err);
+      });
+
+      queue.on('stalled', (job) => {
+        logger.warn(`Queue ${queue.name} job ${job.id} stalled`);
+      });
+    });
+
+    // Graceful shutdown
+    process.on('SIGTERM', async () => {
+      logger.info('Shutting down queues gracefully...');
+      await Promise.all([
+        taskCheckQueue.close(),
+        notificationQueue.close(),
+        cleanupQueue.close()
+      ]);
+      logger.info('Queues shut down successfully');
     });
   }
 
   // Получить статистику очередей
   static async getQueueStats() {
-    const queues = [
-      { name: 'task-check', queue: taskCheckQueue },
-      { name: 'notifications', queue: notificationQueue },
-      { name: 'telegram-api', queue: telegramApiQueue },
-      { name: 'analytics', queue: analyticsQueue },
-      { name: 'cleanup', queue: cleanupQueue }
-    ];
+    const stats = await Promise.all([
+      taskCheckQueue.getJobCounts(),
+      notificationQueue.getJobCounts(),
+      cleanupQueue.getJobCounts()
+    ]);
 
-    const stats = await Promise.all(
-      queues.map(async ({ name, queue }) => {
-        const [waiting, active, completed, failed, delayed] = await Promise.all([
-          queue.getWaiting(),
-          queue.getActive(),
-          queue.getCompleted(),
-          queue.getFailed(),
-          queue.getDelayed()
-        ]);
-
-        return {
-          name,
-          waiting: waiting.length,
-          active: active.length,
-          completed: completed.length,
-          failed: failed.length,
-          delayed: delayed.length
-        };
-      })
-    );
-
-    return stats;
+    return {
+      taskCheck: stats[0],
+      notification: stats[1],
+      cleanup: stats[2]
+    };
   }
 
-  // Очистить все очереди
-  static async clearAllQueues() {
-    const queues = [taskCheckQueue, notificationQueue, telegramApiQueue, analyticsQueue, cleanupQueue];
-    
-    await Promise.all(
-      queues.map(async (queue) => {
-        await queue.empty();
-        await queue.clean(0, 'completed');
-        await queue.clean(0, 'failed');
-      })
-    );
-    
-    logger.info('All queues cleared');
-  }
-
-  // Остановить все очереди
-  static async closeAllQueues() {
-    const queues = [taskCheckQueue, notificationQueue, telegramApiQueue, analyticsQueue, cleanupQueue];
-    
-    await Promise.all(
-      queues.map(queue => queue.close())
-    );
-    
-    await redis.quit();
-    logger.info('All queues closed');
+  // Очистить завершенные задачи
+  static async cleanCompletedJobs() {
+    await Promise.all([
+      taskCheckQueue.clean(24 * 60 * 60 * 1000, 'completed'), // 24 часа
+      notificationQueue.clean(24 * 60 * 60 * 1000, 'completed'),
+      cleanupQueue.clean(24 * 60 * 60 * 1000, 'completed')
+    ]);
   }
 }
 
-// Настройка обработчиков событий для мониторинга
-function setupQueueEventHandlers(queue: Queue.Queue, name: string) {
-  queue.on('completed', (job, result) => {
-    logger.debug(`Queue ${name}: Job ${job.id} completed`, { result });
-  });
-
-  queue.on('failed', (job, err) => {
-    logger.error(`Queue ${name}: Job ${job.id} failed`, { error: err.message, jobData: job.data });
-  });
-
-  queue.on('stalled', (job) => {
-    logger.warn(`Queue ${name}: Job ${job.id} stalled`);
-  });
-
-  queue.on('error', (error) => {
-    logger.error(`Queue ${name} error:`, error);
-  });
-}
-
-// Настройка обработчиков событий для всех очередей
-setupQueueEventHandlers(taskCheckQueue, 'task-check');
-setupQueueEventHandlers(notificationQueue, 'notifications');
-setupQueueEventHandlers(telegramApiQueue, 'telegram-api');
-setupQueueEventHandlers(analyticsQueue, 'analytics');
-setupQueueEventHandlers(cleanupQueue, 'cleanup');
-
-// Graceful shutdown
-process.on('SIGTERM', async () => {
-  logger.info('Gracefully closing queues...');
-  await QueueManager.closeAllQueues();
-});
-
-process.on('SIGINT', async () => {
-  logger.info('Gracefully closing queues...');
-  await QueueManager.closeAllQueues();
-});
-
+// Экспорт для использования в других частях приложения
+export { taskCheckQueue, notificationQueue, cleanupQueue };
 export default QueueManager;
