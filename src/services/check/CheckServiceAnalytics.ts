@@ -32,7 +32,7 @@ export class CheckServiceAnalytics {
         [Op.lte]: period.to
       };
     }
-
+    
     // Статистика созданных чеков
     const createdChecks = await Check.findAll({
       where: { creatorId: userId, ...whereConditions },
@@ -45,25 +45,40 @@ export class CheckServiceAnalytics {
       attributes: ['amount', 'activatedAt']
     });
 
+    const totalCreatedAmount = createdChecks.reduce((sum, c) => sum + c.totalAmount, 0);
+    const totalCreatedActivated = createdChecks.reduce((sum, c) => sum + c.currentActivations, 0);
+    const averageCreatedActivationRate =
+      createdChecks.length > 0
+        ? createdChecks.reduce((sum, c) => sum + (c.currentActivations / c.maxActivations), 0) / createdChecks.length
+        : 0;
+
     const created = {
       total: createdChecks.length,
       active: createdChecks.filter(c => c.isActive).length,
-      totalAmount: createdChecks.reduce((sum, c) => sum + c.totalAmount, 0),
-      totalActivated: createdChecks.reduce((sum, c) => sum + c.currentActivations, 0),
-      averageActivationRate: createdChecks.length > 0 
-        ? createdChecks.reduce((sum, c) => sum + (c.currentActivations / c.maxActivations * 100), 0) / createdChecks.length 
-        : 0
+      totalAmount: totalCreatedAmount,
+      totalActivated: totalCreatedActivated,
+      averageActivationRate: averageCreatedActivationRate
     };
+
+    const totalAmount = receivedActivations.reduce((sum, a) => sum + a.amount, 0);
+    const averageAmount = receivedActivations.length > 0
+      ? totalAmount / receivedActivations.length
+      : 0;
+
+    // === Агрегаты для receivedActivations ===
+    const totalReceivedAmount = receivedActivations.reduce((sum, a) => sum + a.amount, 0);
+    const averageReceivedAmount =
+      receivedActivations.length > 0 ? totalReceivedAmount / receivedActivations.length : 0;
+    const lastActivation =
+      receivedActivations.length > 0
+        ? Math.max(...receivedActivations.map(a => a.activatedAt.getTime()))
+        : undefined;
 
     const received = {
       total: receivedActivations.length,
-      totalAmount: receivedActivations.reduce((sum, a) => sum + a.amount, 0),
-      averageAmount: receivedActivations.length > 0 
-        ? received.totalAmount / receivedActivations.length 
-        : 0,
-      lastActivation: receivedActivations.length > 0 
-        ? Math.max(...receivedActivations.map(a => a.activatedAt.getTime())) 
-        : undefined
+      totalAmount: totalReceivedAmount,
+      averageAmount: averageReceivedAmount,
+      lastActivation
     };
 
     // Тренды по месяцам (последние 12 месяцев)
@@ -294,12 +309,14 @@ export class CheckServiceAnalytics {
       basedOn = 'trend_analysis';
     }
 
-    // Лучшее время для создания
+    // Лучшее время для создания  
     const bestTime = await this.getBestCreationTime();
 
     // Рекомендации по функциям
     const passwordRecommendation = suggestedAmount > 500; // Для больших сумм
     const subscriptionRecommendation = userHistory.created.averageActivationRate < 50; // Если низкая активность
+
+    const estimatedActivationRate = await this.estimateActivationRate(suggestedAmount, userId);
 
     return {
       optimalAmount: {
@@ -310,7 +327,7 @@ export class CheckServiceAnalytics {
       bestTimeToCreate: bestTime,
       targetAudience: {
         recommendedLevels: this.getRecommendedLevels(suggestedAmount),
-        estimatedActivationRate: this.estimateActivationRate(suggestedAmount, userId)
+        estimatedActivationRate
       },
       features: {
         usePassword: passwordRecommendation,

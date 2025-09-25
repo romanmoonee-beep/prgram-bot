@@ -2,7 +2,7 @@
 import { Transaction, Op } from 'sequelize';
 import { User, Transaction as TransactionModel } from '../../database/models';
 import { UserService } from '../user';
-import { NotificationService } from '../notification';
+import { NotificationService } from '../notification/NotificationService';
 import { 
   PaymentMethod,
   PaymentStatus,
@@ -17,6 +17,7 @@ import {
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 import { generatePaymentId } from '../../utils/helpers';
+import { sequelize } from '../../database/models';
 
 export class PaymentService {
   constructor(
@@ -595,7 +596,6 @@ export class PaymentService {
       return await operation(transaction);
     }
 
-    const { sequelize } = TransactionModel;
     return await sequelize.transaction(operation);
   }
 }

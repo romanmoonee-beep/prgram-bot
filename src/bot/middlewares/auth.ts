@@ -1,4 +1,4 @@
-// src/middlewares/auth.ts
+// src/bot/middlewares/auth.ts - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import { Context, NextFunction } from 'grammy';
 import { User } from '../../database/models/User';
 import { logger } from '../../utils/logger';
@@ -42,9 +42,9 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
       
       user = await User.create({
         telegramId,
-        username,
-        firstName,
-        lastName,
+        username: username || undefined,
+        firstName: firstName || undefined,
+        lastName: lastName || undefined,
         languageCode: languageCode || 'en',
         referralCode,
         registeredAt: new Date(),
@@ -63,17 +63,17 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
       let needUpdate = false;
 
       if (user.username !== username) {
-        user.username = username;
+        user.username = username || undefined;
         needUpdate = true;
       }
 
       if (user.firstName !== firstName) {
-        user.firstName = firstName;
+        user.firstName = firstName || undefined;
         needUpdate = true;
       }
 
       if (user.lastName !== lastName) {
-        user.lastName = lastName;
+        user.lastName = lastName || undefined;
         needUpdate = true;
       }
 
@@ -88,9 +88,18 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
       }
     }
 
-    // Проверяем, является ли пользователь администратором
-    const adminIds = process.env.ADMIN_IDS?.split(',').map(id => parseInt(id)) || [];
+    // ИСПРАВЛЕНО: Проверяем, является ли пользователь администратором
+    const adminIds = process.env.ADMIN_IDS?.split(',').map(id => parseInt(id.trim())) || [];
     const isAdmin = adminIds.includes(telegramId);
+
+    // Логирование для отладки
+    if (adminIds.length > 0) {
+      logger.debug('Admin check', {
+        userId: telegramId,
+        adminIds: adminIds,
+        isAdmin: isAdmin
+      });
+    }
 
     // Создаем сессию
     ctx.session = {
@@ -98,6 +107,15 @@ export async function authMiddleware(ctx: Context, next: NextFunction) {
       isRegistered: true,
       isAdmin
     };
+
+    // ДОПОЛНИТЕЛЬНОЕ ЛОГИРОВАНИЕ для админов
+    if (isAdmin) {
+      logger.info(`Admin user authenticated: ${telegramId}`, {
+        username: username,
+        firstName: firstName,
+        isNewUser: isNewUser
+      });
+    }
 
     // Обработка реферальной системы для новых пользователей
     if (isNewUser) {
@@ -231,6 +249,17 @@ export function requireActive(ctx: Context, next: NextFunction) {
   }
   
   return next();
+}
+
+// Функция для получения списка админов (для отладки)
+export function getAdminIds(): number[] {
+  return process.env.ADMIN_IDS?.split(',').map(id => parseInt(id.trim())) || [];
+}
+
+// Функция для проверки админских прав
+export function checkAdminRights(telegramId: number): boolean {
+  const adminIds = getAdminIds();
+  return adminIds.includes(telegramId);
 }
 
 export default authMiddleware;

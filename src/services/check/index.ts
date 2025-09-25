@@ -3,8 +3,8 @@ import { CheckService } from './CheckService';
 import { CheckServiceExtended } from './CheckServiceExtended';
 import { CheckServiceAnalytics } from './CheckServiceAnalytics';
 import { UserService } from '../user';
-import { TransactionService } from '../transaction';
-import { NotificationService } from '../notification';
+import { TransactionService } from '../transaction/TransactionService';
+import { NotificationService } from '../notification/NotificationService';
 import { TelegramService } from '../telegram';
 
 // Экспорт всех типов

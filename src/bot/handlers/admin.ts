@@ -1,4 +1,4 @@
-// src/bot/handlers/admin.ts
+// src/bot/handlers/admin.ts - ИСПРАВЛЕННАЯ ВЕРСИЯ БЕЗ ЗАГЛУШЕК
 import { Bot, Context } from 'grammy';
 import { adminMiddleware, isAdmin } from '../middlewares/admin';
 import { logger } from '../../utils/logger';
@@ -6,6 +6,8 @@ import { EMOJIS } from '../../utils/constants';
 import { getAdminPanelKeyboard } from '../keyboards/additional';
 import { User, Task, TaskExecution, Transaction } from '../../database/models';
 import { Op } from 'sequelize';
+import { literal } from 'sequelize';
+import { sequelize } from '../../database/config/database';
 
 export function setupAdminHandlers(bot: Bot) {
 
@@ -98,7 +100,7 @@ export function setupAdminHandlers(bot: Bot) {
         executionsToday
       ] = await Promise.all([
         TaskExecution.count(),
-        TaskExecution.count({ where: { status: ['completed', 'auto_approved'] } }),
+        TaskExecution.count({ where: { status: { [Op.in]: ['completed', 'auto_approved'] } } }),
         TaskExecution.count({ where: { status: 'in_review' } }),
         TaskExecution.count({ where: { status: 'rejected' } }),
         TaskExecution.count({ where: { createdAt: { [Op.gte]: today } } })
@@ -232,6 +234,330 @@ export function setupAdminHandlers(bot: Bot) {
       await ctx.answerCallbackQuery();
     } catch (error) {
       logger.error('Admin user search error:', error);
+      await ctx.answerCallbackQuery('Произошла ошибка');
+    }
+  });
+
+  // Статистика пользователей
+  bot.callbackQuery('admin_user_stats', adminMiddleware, async (ctx) => {
+    try {
+      const now = new Date();
+      const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+      const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+
+      // Детальная статистика пользователей
+      const [
+        totalUsers,
+        activeLastWeek,
+        activeLastMonth,
+        averageBalance,
+        topBalanceUser,
+        usersByLevel
+      ] = await Promise.all([
+        User.count(),
+        User.count({ where: { lastActiveAt: { [Op.gte]: weekAgo } } }),
+        User.count({ where: { lastActiveAt: { [Op.gte]: monthAgo } } }),
+        User.findOne({
+          attributes: [[sequelize.literal('AVG(balance)'), 'avgBalance']],
+          raw: true
+        }),
+        User.findOne({
+          order: [['balance', 'DESC']],
+          attributes: ['balance', 'firstName', 'username']
+        }),
+        User.findAll({
+          attributes: [
+            'level',
+            [sequelize.literal('COUNT(*)'), 'count']
+          ],
+          group: ['level'],
+          raw: true
+        })
+      ]);
+
+      let message = `👥 **ДЕТАЛЬНАЯ СТАТИСТИКА ПОЛЬЗОВАТЕЛЕЙ**\n\n`;
+      
+      message += `📊 **Активность:**\n`;
+      message += `├ Всего пользователей: ${totalUsers.toLocaleString()}\n`;
+      message += `├ Активных за неделю: ${activeLastWeek.toLocaleString()}\n`;
+      message += `├ Активных за месяц: ${activeLastMonth.toLocaleString()}\n`;
+      message += `└ Коэффициент удержания: ${Math.round((activeLastWeek / totalUsers) * 100)}%\n\n`;
+      
+      message += `💰 **Финансы:**\n`;
+      message += `├ Средний баланс: ${Math.round((averageBalance as any)?.avgBalance || 0).toLocaleString()} GRAM\n`;
+      message += `├ Топ баланс: ${(topBalanceUser?.balance || 0).toLocaleString()} GRAM\n`;
+      message += `└ Владелец: ${topBalanceUser?.firstName || topBalanceUser?.username || 'Неизвестно'}\n\n`;
+      
+      message += `🏆 **Распределение по уровням:**\n`;
+      usersByLevel.forEach((level: any) => {
+        const levelName = level.level === 'bronze' ? 'Бронза' : 
+                         level.level === 'silver' ? 'Серебро' :
+                         level.level === 'gold' ? 'Золото' : 'Премиум';
+        message += `├ ${levelName}: ${level.count}\n`;
+      });
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🔄 Обновить', callback_data: 'admin_user_stats' },
+            { text: '🏆 Топ пользователи', callback_data: 'admin_user_top' }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error('Admin user stats error:', error);
+      await ctx.answerCallbackQuery('Произошла ошибка');
+    }
+  });
+
+  // Топ пользователей
+  bot.callbackQuery('admin_user_top', adminMiddleware, async (ctx) => {
+    try {
+      const [
+        topByBalance,
+        topByEarned,
+        topByTasks,
+        topByReferrals
+      ] = await Promise.all([
+        User.findAll({
+          order: [['balance', 'DESC']],
+          limit: 5,
+          attributes: ['telegramId', 'firstName', 'username', 'balance']
+        }),
+        User.findAll({
+          order: [['totalEarned', 'DESC']],
+          limit: 5,
+          attributes: ['telegramId', 'firstName', 'username', 'totalEarned']
+        }),
+        User.findAll({
+          order: [['tasksCompleted', 'DESC']],
+          limit: 5,
+          attributes: ['telegramId', 'firstName', 'username', 'tasksCompleted']
+        }),
+        User.findAll({
+          order: [['referralsCount', 'DESC']],
+          limit: 5,
+          attributes: ['telegramId', 'firstName', 'username', 'referralsCount']
+        })
+      ]);
+
+      let message = `🏆 **ТОП ПОЛЬЗОВАТЕЛЕЙ**\n\n`;
+      
+      message += `💰 **По балансу:**\n`;
+      topByBalance.forEach((user, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        const name = user.firstName || user.username || `ID${user.telegramId}`;
+        message += `${medal} ${name} - ${(user.balance || 0).toLocaleString()} GRAM\n`;
+      });
+
+      message += `\n⚡ **По заданиям:**\n`;
+      topByTasks.forEach((user, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        const name = user.firstName || user.username || `ID${user.telegramId}`;
+        message += `${medal} ${name} - ${user.tasksCompleted || 0} заданий\n`;
+      });
+
+      message += `\n🤝 **По рефералам:**\n`;
+      topByReferrals.forEach((user, i) => {
+        const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : `${i + 1}.`;
+        const name = user.firstName || user.username || `ID${user.telegramId}`;
+        message += `${medal} ${name} - ${user.referralsCount || 0} рефералов\n`;
+      });
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '📊 Статистика', callback_data: 'admin_user_stats' },
+            { text: '🔍 Поиск', callback_data: 'admin_user_search' }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error('Admin user top error:', error);
+      await ctx.answerCallbackQuery('Произошла ошибка');
+    }
+  });
+
+  // Заблокированные пользователи
+  bot.callbackQuery('admin_user_banned', adminMiddleware, async (ctx) => {
+    try {
+      const bannedUsers = await User.findAll({
+        where: { isBanned: true },
+        order: [['updatedAt', 'DESC']],
+        limit: 10,
+        attributes: ['id', 'telegramId', 'firstName', 'username', 'updatedAt']
+      });
+
+      let message = `🚫 **ЗАБЛОКИРОВАННЫЕ ПОЛЬЗОВАТЕЛИ** (${bannedUsers.length})\n\n`;
+
+      if (bannedUsers.length === 0) {
+        message += `✅ Нет заблокированных пользователей.`;
+      } else {
+        bannedUsers.forEach((user, i) => {
+          const name = user.firstName || user.username || `ID${user.telegramId}`;
+          const date = user.updatedAt.toLocaleDateString('ru-RU');
+          message += `${i + 1}. ${name}\n`;
+          message += `ID: ${user.telegramId}\n`;
+          message += `Заблокирован: ${date}\n\n`;
+        });
+      }
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🔄 Обновить', callback_data: 'admin_user_banned' },
+            { text: '🔍 Поиск пользователя', callback_data: 'admin_user_search' }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error('Admin banned users error:', error);
+      await ctx.answerCallbackQuery('Произошла ошибка');
+    }
+  });
+
+  // Premium пользователи
+  bot.callbackQuery('admin_user_premium', adminMiddleware, async (ctx) => {
+    try {
+      const premiumUsers = await User.findAll({
+        where: { isPremium: true },
+        order: [['balance', 'DESC']],
+        limit: 10,
+        attributes: ['telegramId', 'firstName', 'username', 'balance', 'premiumExpiresAt']
+      });
+
+      let message = `💎 **PREMIUM ПОЛЬЗОВАТЕЛИ** (${premiumUsers.length})\n\n`;
+
+      if (premiumUsers.length === 0) {
+        message += `ℹ️ Нет Premium пользователей.`;
+      } else {
+        premiumUsers.forEach((user, i) => {
+          const name = user.firstName || user.username || `ID${user.telegramId}`;
+          const expires = user.premiumExpiresAt ? 
+            user.premiumExpiresAt.toLocaleDateString('ru-RU') : 'Бессрочно';
+          message += `${i + 1}. 💎 ${name}\n`;
+          message += `💰 ${(user.balance || 0).toLocaleString()} GRAM\n`;
+          message += `📅 До: ${expires}\n\n`;
+        });
+      }
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🔄 Обновить', callback_data: 'admin_user_premium' },
+            { text: '🔍 Поиск пользователя', callback_data: 'admin_user_search' }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error('Admin premium users error:', error);
+      await ctx.answerCallbackQuery('Произошла ошибка');
+    }
+  });
+
+  // Новые пользователи
+  bot.callbackQuery('admin_user_new', adminMiddleware, async (ctx) => {
+    try {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const newUsers = await User.findAll({
+        where: {
+          registeredAt: { [Op.gte]: today }
+        },
+        order: [['registeredAt', 'DESC']],
+        limit: 15,
+        attributes: ['telegramId', 'firstName', 'username', 'registeredAt', 'referrerId'],
+        include: [
+          {
+            model: User,
+            as: 'referrer',
+            attributes: ['firstName', 'username'],
+            required: false
+          }
+        ]
+      });
+
+      let message = `📈 **НОВЫЕ ПОЛЬЗОВАТЕЛИ СЕГОДНЯ** (${newUsers.length})\n\n`;
+
+      if (newUsers.length === 0) {
+        message += `ℹ️ Сегодня новых регистраций пока нет.`;
+      } else {
+        newUsers.forEach((user, i) => {
+          const name = user.firstName || user.username || `ID${user.telegramId}`;
+          const time = user.registeredAt.toLocaleTimeString('ru-RU', { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          });
+          const referrerName = user.referrer ? 
+            (user.referrer.firstName || user.referrer.username || 'Неизвестно') : 
+            'Прямая регистрация';
+          
+          message += `${i + 1}. ${name}\n`;
+          message += `⏰ ${time} | 🤝 ${referrerName}\n\n`;
+        });
+      }
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🔄 Обновить', callback_data: 'admin_user_new' },
+            { text: '📊 Статистика', callback_data: 'admin_user_stats' }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error('Admin new users error:', error);
       await ctx.answerCallbackQuery('Произошла ошибка');
     }
   });
@@ -433,9 +759,29 @@ export function setupAdminHandlers(bot: Bot) {
 
       await ctx.answerCallbackQuery(`✅ Пользователь ${targetUser.getDisplayName()} заблокирован`);
 
-      // Обновляем сообщение
-      ctx.callbackQuery.data = 'admin_user_search';
-      // Здесь можно обновить отображение пользователя
+      // Обновляем сообщение - показываем информацию об обновленном пользователе
+      let message = `👤 **ПОЛЬЗОВАТЕЛЬ ЗАБЛОКИРОВАН**\n\n`;
+      message += `🆔 **ID:** ${targetUser.telegramId}\n`;
+      message += `👨‍💼 **Имя:** ${targetUser.getDisplayName()}\n`;
+      message += `📊 **Статус:** 🚫 Заблокирован\n\n`;
+      message += `Пользователь больше не может использовать бота.`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '✅ Разблокировать', callback_data: `admin_user_unban_${userId}` },
+            { text: '🔍 Новый поиск', callback_data: 'admin_user_search' }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
 
     } catch (error) {
       logger.error('Admin ban user error:', error);
@@ -462,8 +808,138 @@ export function setupAdminHandlers(bot: Bot) {
 
       await ctx.answerCallbackQuery(`✅ Пользователь ${targetUser.getDisplayName()} разблокирован`);
 
+      // Обновляем сообщение
+      let message = `👤 **ПОЛЬЗОВАТЕЛЬ РАЗБЛОКИРОВАН**\n\n`;
+      message += `🆔 **ID:** ${targetUser.telegramId}\n`;
+      message += `👨‍💼 **Имя:** ${targetUser.getDisplayName()}\n`;
+      message += `📊 **Статус:** 🟢 Активен\n\n`;
+      message += `Пользователь снова может использовать бота.`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '🚫 Заблокировать', callback_data: `admin_user_ban_${userId}` },
+            { text: '🔍 Новый поиск', callback_data: 'admin_user_search' }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
     } catch (error) {
       logger.error('Admin unban user error:', error);
+      await ctx.answerCallbackQuery('❌ Произошла ошибка');
+    }
+  });
+
+  // Выдача Premium
+  bot.callbackQuery(/^admin_user_premium_(\d+)$/, adminMiddleware, async (ctx) => {
+    try {
+      const userId = parseInt(ctx.match![1]);
+      const targetUser = await User.findByPk(userId);
+      
+      if (!targetUser) {
+        await ctx.answerCallbackQuery('❌ Пользователь не найден');
+        return;
+      }
+
+      targetUser.isPremium = true;
+      const expiryDate = new Date();
+      expiryDate.setDate(expiryDate.getDate() + 30);
+      targetUser.premiumExpiresAt = expiryDate;
+
+      await targetUser.save();
+
+      logger.userAction(ctx.session!.user!.telegramId, 'admin_user_premium_granted', { targetUserId: userId });
+
+      await ctx.answerCallbackQuery(`✅ Premium выдан пользователю ${targetUser.getDisplayName()}`);
+
+      try {
+        await ctx.api.sendMessage(
+          targetUser.telegramId,
+          `🎉 Поздравляем!\n\nВам выдан Premium статус на 30 дней!\n\n💎 Теперь вы получаете больше бонусов и привилегий.`
+        );
+      } catch (notifyError) {
+        logger.warn('Failed to notify user about premium:', notifyError);
+      }
+    } catch (error) {
+      logger.error('Admin premium grant error:', error);
+      await ctx.answerCallbackQuery('❌ Произошла ошибка');
+    }
+  });
+
+  // Снятие Premium
+  bot.callbackQuery(/^admin_user_unpremium_(\d+)$/, adminMiddleware, async (ctx) => {
+    try {
+      const userId = parseInt(ctx.match![1]);
+      const targetUser = await User.findByPk(userId);
+      
+      if (!targetUser) {
+        await ctx.answerCallbackQuery('❌ Пользователь не найден');
+        return;
+      }
+
+      targetUser.isPremium = false;
+      targetUser.premiumExpiresAt = null;
+
+      await targetUser.save();
+
+      logger.userAction(ctx.session!.user!.telegramId, 'admin_user_premium_removed', { targetUserId: userId });
+
+      await ctx.answerCallbackQuery(`✅ Premium снят у пользователя ${targetUser.getDisplayName()}`);
+    } catch (error) {
+      logger.error('Admin unpremium error:', error);
+      await ctx.answerCallbackQuery('❌ Произошла ошибка');
+    }
+  });
+
+  // Изменение баланса
+  bot.callbackQuery(/^admin_user_balance_(\d+)$/, adminMiddleware, async (ctx) => {
+    try {
+      const userId = parseInt(ctx.match![1]);
+      const user = ctx.session!.user!;
+      
+      user.currentState = JSON.stringify({ 
+        action: 'admin_changing_balance', 
+        data: { targetUserId: userId } 
+      });
+      await user.save();
+
+      const targetUser = await User.findByPk(userId);
+      if (!targetUser) {
+        await ctx.answerCallbackQuery('❌ Пользователь не найден');
+        return;
+      }
+
+      let message = `💰 **ИЗМЕНЕНИЕ БАЛАНСА**\n\n`;
+      message += `👤 **Пользователь:** ${targetUser.getDisplayName()}\n`;
+      message += `💳 **Текущий баланс:** ${targetUser.balance?.toLocaleString() || 0} GRAM\n\n`;
+      message += `Введите сумму для изменения баланса:\n\n`;
+      message += `**Примеры:**\n`;
+      message += `• \`+1000\` - добавить 1000 GRAM\n`;
+      message += `• \`-500\` - убрать 500 GRAM\n`;
+      message += `• \`5000\` - установить баланс 5000 GRAM`;
+
+      const keyboard = {
+        inline_keyboard: [[
+          { text: '❌ Отмена', callback_data: 'admin_users_management' }
+        ]]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
+      await ctx.answerCallbackQuery();
+    } catch (error) {
+      logger.error('Admin change balance error:', error);
       await ctx.answerCallbackQuery('❌ Произошла ошибка');
     }
   });
@@ -483,7 +959,7 @@ export function setupAdminHandlers(bot: Bot) {
       message += `• *курсив*\n`;
       message += `• \`код\`\n`;
       message += `• [ссылки](https://example.com)\n\n`;
-      message += `⚠️ **Внимание:** Сообщение будет отправлено ВСЕМ пользователям бота!`;
+      message += `⚠️ **Внимание:** Сообщение будет отправлено ВСЕМ активным пользователям бота!`;
 
       const keyboard = {
         inline_keyboard: [[
@@ -503,7 +979,7 @@ export function setupAdminHandlers(bot: Bot) {
     }
   });
 
-  // Обработка рассылки
+  // Обработка рассылки и изменения баланса
   bot.on('message:text', async (ctx, next) => {
     try {
       const user = ctx.session?.user;
@@ -512,46 +988,18 @@ export function setupAdminHandlers(bot: Bot) {
       }
 
       const stateData = JSON.parse(user.currentState || '{}');
-      if (stateData.action !== 'admin_creating_broadcast') {
-        return next();
+      
+      if (stateData.action === 'admin_creating_broadcast') {
+        await handleBroadcastCreation(ctx, user);
+        return;
+      } else if (stateData.action === 'admin_changing_balance') {
+        await handleBalanceChange(ctx, user, stateData.data);
+        return;
       }
-
-      const broadcastText = ctx.message.text;
-
-      user.currentState = null;
-      await user.save();
-
-      // Получаем всех активных пользователей
-      const users = await User.findAll({
-        where: { 
-          isActive: true,
-          isBanned: false
-        },
-        attributes: ['telegramId']
-      });
-
-      let message = `📢 **ПОДТВЕРЖДЕНИЕ РАССЫЛКИ**\n\n`;
-      message += `**Получателей:** ${users.length.toLocaleString()} пользователей\n\n`;
-      message += `**Текст сообщения:**\n`;
-      message += `${broadcastText}\n\n`;
-      message += `⚠️ Подтвердите отправку рассылки:`;
-
-      const keyboard = {
-        inline_keyboard: [
-          [
-            { text: '✅ Отправить рассылку', callback_data: `confirm_broadcast_${Buffer.from(broadcastText).toString('base64')}` },
-            { text: '❌ Отмена', callback_data: 'admin_panel' }
-          ]
-        ]
-      };
-
-      await ctx.reply(message, {
-        reply_markup: keyboard,
-        parse_mode: 'Markdown'
-      });
-
+      
+      await next();
     } catch (error) {
-      logger.error('Admin broadcast handler error:', error);
+      logger.error('Admin text handler error:', error);
       await next();
     }
   });
@@ -631,4 +1079,154 @@ export function setupAdminHandlers(bot: Bot) {
   });
 
   logger.info('✅ Admin handlers configured');
+}
+
+// Вспомогательные функции
+async function handleBroadcastCreation(ctx: Context, user: User) {
+  const broadcastText = ctx.message!.text!;
+
+  user.currentState = null;
+  await user.save();
+
+  // Получаем всех активных пользователей
+  const users = await User.findAll({
+    where: { 
+      isActive: true,
+      isBanned: false
+    },
+    attributes: ['telegramId']
+  });
+
+  let message = `📢 **ПОДТВЕРЖДЕНИЕ РАССЫЛКИ**\n\n`;
+  message += `**Получателей:** ${users.length.toLocaleString()} пользователей\n\n`;
+  message += `**Текст сообщения:**\n`;
+  message += `${broadcastText}\n\n`;
+  message += `⚠️ Подтвердите отправку рассылки:`;
+
+  const keyboard = {
+    inline_keyboard: [
+      [
+        { text: '✅ Отправить рассылку', callback_data: `confirm_broadcast_${Buffer.from(broadcastText).toString('base64')}` },
+        { text: '❌ Отмена', callback_data: 'admin_panel' }
+      ]
+    ]
+  };
+
+  await ctx.reply(message, {
+    reply_markup: keyboard,
+    parse_mode: 'Markdown'
+  });
+}
+
+async function handleBalanceChange(ctx: Context, user: User, data: any) {
+  const input = ctx.message!.text!.trim();
+  const targetUserId = data.targetUserId;
+
+  user.currentState = null;
+  await user.save();
+
+  const targetUser = await User.findByPk(targetUserId);
+  if (!targetUser) {
+    await ctx.reply('❌ Пользователь не найден.');
+    return;
+  }
+
+  let amount: number;
+  let operation: 'add' | 'subtract' | 'set' = 'set';
+
+  if (input.startsWith('+')) {
+    amount = parseInt(input.substring(1));
+    operation = 'add';
+  } else if (input.startsWith('-')) {
+    amount = parseInt(input.substring(1));
+    operation = 'subtract';
+  } else {
+    amount = parseInt(input);
+    operation = 'set';
+  }
+
+  if (isNaN(amount) || amount < 0) {
+    await ctx.reply('❌ Неверный формат суммы. Используйте числа.');
+    return;
+  }
+
+  const oldBalance = targetUser.balance || 0;
+  let newBalance: number;
+
+  try {
+    switch (operation) {
+      case 'add':
+        newBalance = oldBalance + amount;
+        await targetUser.updateBalance(amount, 'add');
+        break;
+      case 'subtract':
+        if (oldBalance < amount) {
+          await ctx.reply(`❌ Недостаточно средств у пользователя. Баланс: ${oldBalance} GRAM`);
+          return;
+        }
+        newBalance = oldBalance - amount;
+        await targetUser.updateBalance(amount, 'subtract');
+        break;
+      case 'set':
+        newBalance = amount;
+        targetUser.balance = amount;
+        await targetUser.save();
+        break;
+    }
+
+    // Создаем транзакцию для истории
+    await Transaction.create({
+      userId: targetUser.id,
+      type: operation === 'add' ? 'admin_bonus' : operation === 'subtract' ? 'admin_deduction' : 'admin_adjustment',
+      amount: Math.abs(newBalance - oldBalance),
+      balanceBefore: oldBalance,
+      balanceAfter: newBalance,
+      description: `Изменение баланса администратором`,
+      status: 'completed',
+      processedAt: new Date()
+    });
+
+    let message = `✅ **Баланс изменен!**\n\n`;
+    message += `👤 **Пользователь:** ${targetUser.getDisplayName()}\n`;
+    message += `💰 **Было:** ${oldBalance.toLocaleString()} GRAM\n`;
+    message += `💳 **Стало:** ${newBalance.toLocaleString()} GRAM\n`;
+    message += `📊 **Изменение:** ${operation === 'add' ? '+' : operation === 'subtract' ? '-' : ''}${Math.abs(newBalance - oldBalance).toLocaleString()} GRAM`;
+
+    await ctx.reply(message, {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: '🔍 Найти другого', callback_data: 'admin_user_search' },
+            { text: '⬅️ Назад', callback_data: 'admin_users_management' }
+          ]
+        ]
+      },
+      parse_mode: 'Markdown'
+    });
+
+    // Уведомляем пользователя
+    try {
+      const changeText = operation === 'add' ? 'увеличен' : operation === 'subtract' ? 'уменьшен' : 'изменен';
+      await ctx.api.sendMessage(
+        targetUser.telegramId,
+        `💰 **Ваш баланс ${changeText}**\n\n` +
+        `Новый баланс: ${newBalance.toLocaleString()} GRAM\n\n` +
+        `Изменение внесено администратором.`
+      );
+    } catch (notifyError) {
+      logger.warn('Failed to notify user about balance change:', notifyError);
+    }
+
+    logger.userAction(user.telegramId, 'admin_balance_changed', {
+      targetUserId: targetUser.id,
+      oldBalance,
+      newBalance,
+      operation,
+      amount
+    });
+
+  } catch (error) {
+    logger.error('Balance change error:', error);
+    await ctx.reply('❌ Произошла ошибка при изменении баланса.');
+  }
 }

@@ -42,7 +42,7 @@ export interface UserAttributes extends Model<InferAttributes<User>, InferCreati
   isActive: CreationOptional<boolean>;
   isBanned: CreationOptional<boolean>;
   isPremium: CreationOptional<boolean>;
-  premiumExpiresAt?: Date;
+  premiumExpiresAt: Date | null;
   
   // Уведомления
   notificationSettings: CreationOptional<object>;
@@ -84,7 +84,7 @@ export class User extends Model<InferAttributes<User>, InferCreationAttributes<U
   declare isActive: CreationOptional<boolean>;
   declare isBanned: CreationOptional<boolean>;
   declare isPremium: CreationOptional<boolean>;
-  declare premiumExpiresAt?: Date;
+  declare premiumExpiresAt: Date | null;
   
   declare notificationSettings: CreationOptional<object>;
   

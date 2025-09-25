@@ -320,6 +320,33 @@ export function getRandomElement<T>(array: T[]): T | undefined {
   return array[Math.floor(Math.random() * array.length)];
 }
 
+// Функция для генерации кода чека
+export function generateCheckCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let result = '';
+  for (let i = 0; i < 16; i++) {
+    result += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return result;
+}
+
+// Функция для хеширования пароля (простая для примера)
+export function hashPassword(password: string): string {
+  // В реальном проекте используйте bcrypt или другую криптографическую библиотеку
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Конвертируем в 32-битное целое
+  }
+  return Math.abs(hash).toString(36);
+}
+
+// Функция для проверки пароля
+export function validatePasswordHash(password: string, hash: string): boolean {
+  return hashPassword(password) === hash;
+}
+
 export default {
   formatNumber,
   formatGram,

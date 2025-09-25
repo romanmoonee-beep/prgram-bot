@@ -3,8 +3,8 @@ import { Transaction, Op } from 'sequelize';
 import { CheckService } from './CheckService';
 import { CheckServiceAnalytics } from './CheckServiceAnalytics';
 import { UserService } from '../user';
-import { TransactionService } from '../transaction';
-import { NotificationService } from '../notification';
+import { TransactionService } from '../transaction/TransactionService';
+import { NotificationService } from '../notification/NotificationService';
 import { TelegramService } from '../telegram';
 import { Check, CheckActivation, User } from '../../database/models';
 import { 
@@ -12,15 +12,19 @@ import {
   BulkCheckResult, 
   CheckDetails,
   CheckTemplate,
-  CheckServiceConfig
+  CheckServiceConfig,
+  CheckType
 } from './types';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { generateQRCode } from '../../utils/helpers';
+import { generateQRCode } from '../../utils/helpers/init';
+import { Sequelize } from 'sequelize';
 
 export class CheckServiceExtended extends CheckService {
-  public analytics: CheckServiceAnalytics;
-  private config: CheckServiceConfig;
+  public analytics: CheckServiceAnalytics;   // 🔹 добавляем это
+  private config: CheckServiceConfig;        // 🔹 добавляем это
+  private userService: UserService;          // 🔹 добавляем это
+  private telegramService: TelegramService;  // 🔹 добавляем это
 
   constructor(
     userService: UserService,
@@ -29,8 +33,11 @@ export class CheckServiceExtended extends CheckService {
     telegramService: TelegramService,
     config?: Partial<CheckServiceConfig>
   ) {
-    super(userService, transactionService, notificationService, telegramService);
-    
+    super(transactionService, notificationService); // только то, что ожидает родитель
+
+    this.userService = userService;
+    this.telegramService = telegramService;
+
     this.analytics = new CheckServiceAnalytics();
     this.config = {
       limits: {
@@ -72,7 +79,7 @@ export class CheckServiceExtended extends CheckService {
     if (!this.config.features.allowBulkCreation) {
       throw new AppError('Bulk check creation is disabled', 403);
     }
-
+    
     return await this.executeInTransaction(transaction, async (t) => {
       const successful: Array<{ check: any; code: string }> = [];
       const failed: Array<{ index: number; error: string; data: any }> = [];
@@ -92,14 +99,20 @@ export class CheckServiceExtended extends CheckService {
         const checkData = bulkData.checks[i];
         
         try {
-          const fullCheckData = {
-            ...bulkData.commonSettings,
+          const fullCheckData: Parameters<CheckService['createCheck']>[0] = {
+            creatorId,
+            type: bulkData.commonSettings?.type ?? 'multi',
             totalAmount: checkData.amount,
+            maxActivations: bulkData.commonSettings?.maxActivations ?? 1,
             comment: checkData.comment,
-            targetUserId: checkData.targetUserId
+            targetUserId: checkData.targetUserId,
+            password: bulkData.commonSettings?.password,
+            expiresAt: bulkData.commonSettings?.expiresAt,
+            requiredSubscription: bulkData.commonSettings?.requiredSubscription
           };
 
-          const check = await super.createCheck(creatorId, fullCheckData, t);
+          const check = await super.createCheck(fullCheckData, t);
+
           successful.push({ check, code: check.code });
           totalAmount += checkData.amount;
 
@@ -162,7 +175,7 @@ export class CheckServiceExtended extends CheckService {
     
     const activationTimes = activations
       .filter(a => a.activatedAt)
-      .map(a => a.activatedAt.getTime() - check.createdAt.getTime());
+      .map(a => (a.activatedAt as Date).getTime() - check.createdAt.getTime());
     
     const averageTimeToActivation = activationTimes.length > 0
       ? activationTimes.reduce((sum, time) => sum + time, 0) / activationTimes.length / 1000 / 60 // в минутах
@@ -195,9 +208,9 @@ export class CheckServiceExtended extends CheckService {
 
     if (!check.isActive && check.expiresAt && check.expiresAt <= new Date()) {
       timeline.push({
-        type: 'expired' as const,
+        type: 'expired',
         timestamp: check.expiresAt
-      });
+      } as any);
     }
 
     timeline.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
@@ -239,7 +252,18 @@ export class CheckServiceExtended extends CheckService {
     qrCode: string;
     shareUrl: string;
   }> {
-    const check = await super.createCheck(creatorId, checkData, transaction);
+    
+    const check = await super.createCheck({
+      creatorId,
+      type: checkData.type ?? 'multi',
+      totalAmount: checkData.totalAmount,
+      maxActivations: checkData.maxActivations ?? 1,
+      comment: checkData.comment,
+      targetUserId: checkData.targetUserId,
+      password: checkData.password,
+      expiresAt: checkData.expiresAt,
+      requiredSubscription: checkData.requiredSubscription
+    }, transaction);
     
     // Генерируем QR код
     const shareUrl = `https://t.me/prgram_bot?start=check_${check.code}`;
@@ -256,13 +280,12 @@ export class CheckServiceExtended extends CheckService {
    * Получение популярных шаблонов чеков
    */
   async getCheckTemplates(): Promise<CheckTemplate[]> {
-    // В реальной реализации шаблоны будут браться из БД
     return [
       {
         id: 'giveaway_small',
         name: 'Small Giveaway',
         description: 'Perfect for small community rewards',
-        type: 'multi' as const,
+        type: CheckType.MULTI,          
         defaultAmount: 500,
         defaultMaxActivations: 10,
         requiresPassword: false,
@@ -274,7 +297,7 @@ export class CheckServiceExtended extends CheckService {
         id: 'personal_gift',
         name: 'Personal Gift',
         description: 'Send GRAM to specific person',
-        type: 'personal' as const,
+        type: CheckType.PERSONAL,       
         defaultAmount: 100,
         requiresPassword: false,
         requiresSubscription: false,
@@ -285,7 +308,7 @@ export class CheckServiceExtended extends CheckService {
         id: 'large_promotion',
         name: 'Large Promotion',
         description: 'Big promotional campaign',
-        type: 'multi' as const,
+        type: CheckType.MULTI, 
         defaultAmount: 5000,
         defaultMaxActivations: 100,
         requiresPassword: true,
@@ -568,7 +591,6 @@ export class CheckServiceExtended extends CheckService {
    * Подсчет новых пользователей за период
    */
   private async countNewUsersInPeriod(period: { from: Date; to: Date }): Promise<number> {
-    // Находим пользователей, которые активировали свой первый чек в этом периоде
     const firstActivations = await CheckActivation.findAll({
       where: {
         activatedAt: {
@@ -578,12 +600,7 @@ export class CheckServiceExtended extends CheckService {
       },
       attributes: ['userId'],
       group: ['userId'],
-      having: {
-        [Op.eq]: [
-          { [Op.fn]: 'MIN', [Op.col]: 'activated_at' },
-          { [Op.col]: 'activated_at' }
-        ]
-      }
+      having: Sequelize.literal('MIN(activated_at) = activated_at')
     });
 
     return firstActivations.length;

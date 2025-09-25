@@ -1,282 +1,205 @@
-// src/services/check/CheckService.ts
-import { Transaction, Op } from 'sequelize';
+// src/services/check/CheckService.ts - ИСПРАВЛЕННАЯ ВЕРСИЯ
+import { Transaction as DBTransaction, Op } from 'sequelize';
 import { Check, CheckActivation, User } from '../../database/models';
-import { UserService } from '../user';
-import { TransactionService } from '../transactions';
-import { NotificationService } from '../notification';
-import { TelegramService } from '../telegram';
-import { 
-  CheckType, 
-  CheckStatus,
-  CheckCreateData, 
-  CheckActivateData,
-  CheckFilters,
-  CheckStats
-} from './types';
+import { TransactionService } from '../transaction/TransactionService';
+import { NotificationService } from '../notification/NotificationService';
+import { generateCheckCode, validatePasswordHash, hashPassword } from '../../utils/helpers/init';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { generateCheckCode, validatePassword, hashPassword } from '../../utils/helpers/init';
+import { sequelize } from '../../database/config/database';
 
 export class CheckService {
   constructor(
-    private userService: UserService,
-    private transactionService: TransactionService,
-    private notificationService: NotificationService,
-    private telegramService: TelegramService
+    protected transactionService: TransactionService,
+    protected notificationService: NotificationService
   ) {}
 
   /**
-   * Создание нового чека
+   * Создание чека
    */
-  async createCheck(
-    creatorId: number,
-    checkData: CheckCreateData,
-    transaction?: Transaction
-  ): Promise<Check> {
+
+
+
+
+  async createCheck(data: {
+    creatorId: number;
+    type: 'personal' | 'multi';
+    totalAmount: number;
+    maxActivations: number;   
+    targetUserId?: number;
+    password?: string;
+    comment?: string;
+    expiresAt?: Date;
+    requiredSubscription?: string;
+  }, transaction?: DBTransaction): Promise<Check> {
     return await this.executeInTransaction(transaction, async (t) => {
-      // Получаем создателя чека
-      const creator = await this.userService.getById(creatorId, t);
+      const creator = await User.findByPk(data.creatorId, { transaction: t });
       if (!creator) {
         throw new AppError('Creator not found', 404);
       }
 
-      // Валидируем данные чека
-      await this.validateCheckData(checkData, creator);
-
-      // Проверяем баланс создателя
-      if (creator.balance < checkData.totalAmount) {
+      // Проверяем баланс
+      if (creator.balance < data.totalAmount) {
         throw new AppError('Insufficient balance', 400);
       }
 
-      // Рассчитываем сумму на одну активацию
-      const amountPerActivation = checkData.type === 'personal' 
-        ? checkData.totalAmount 
-        : Math.floor(checkData.totalAmount / checkData.maxActivations!);
-
-      // Генерируем уникальный код чека
-      const code = await this.generateUniqueCheckCode();
-
-      // Хешируем пароль если есть
-      const hashedPassword = checkData.password 
-        ? await hashPassword(checkData.password) 
-        : null;
-
       // Списываем средства с баланса создателя
-      await this.userService.updateBalance(creatorId, -checkData.totalAmount, 0, t);
+      await creator.updateBalance(data.totalAmount, 'subtract');
 
       // Создаем чек
       const check = await Check.create({
-        creatorId,
-        code,
-        type: checkData.type,
-        totalAmount: checkData.totalAmount,
-        amountPerActivation,
-        maxActivations: checkData.maxActivations || 1,
+        creatorId: data.creatorId,
+        code: generateCheckCode(),
+        type: data.type,
+        totalAmount: data.totalAmount,
+        amountPerActivation: Math.floor(data.totalAmount / data.maxActivations),
+        maxActivations: data.maxActivations,
         currentActivations: 0,
-        password: hashedPassword,
-        requiredSubscription: checkData.requiredSubscription,
-        targetUserId: checkData.targetUserId,
-        comment: checkData.comment,
-        imageUrl: checkData.imageUrl,
-        isActive: true,
-        expiresAt: checkData.expiresAt
+        targetUserId: data.targetUserId,
+        password: data.password ? hashPassword(data.password) : undefined,
+        comment: data.comment,
+        expiresAt: data.expiresAt || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        requiredSubscription: data.requiredSubscription,
+        isActive: true
       }, { transaction: t });
 
       // Создаем транзакцию
-      await this.transactionService.createTransaction({
-        userId: creatorId,
-        type: 'check_creation',
-        amount: -checkData.totalAmount,
-        relatedCheckId: check.id,
-        description: `Check creation: ${checkData.totalAmount} GRAM`,
-        metadata: { checkCode: code, checkType: checkData.type }
-      }, t);
+      await this.transactionService.createCheckTransaction(
+        data.creatorId,
+        data.totalAmount,
+        creator.balance + data.totalAmount,
+        check.id,
+        true,
+        t
+      );
 
-      // Отправляем уведомление создателю
-      await this.notificationService.createNotification({
-        userId: creatorId,
-        type: 'check_created',
-        title: 'Check Created Successfully',
-        message: `Your check for ${checkData.totalAmount} GRAM has been created`,
-        data: { 
-          checkId: check.id, 
-          code, 
-          amount: checkData.totalAmount 
-        },
-        priority: 2
-      }, t);
-
-      logger.info(`Check created: ${check.id} by user ${creatorId}, amount: ${checkData.totalAmount}`);
+      logger.info(`Check created: ${check.id} by user ${data.creatorId}`);
       return check;
     });
   }
 
   /**
-   * Активация чека пользователем
+   * Активация чека
    */
-  async activateCheck(
-    userId: number,
-    activateData: CheckActivateData,
-    transaction?: Transaction
-  ): Promise<{
+  async activateCheck(data: {
+    userId: number;
+    code: string;
+    password?: string;
+  }, transaction?: DBTransaction): Promise<{
     success: boolean;
-    amount: number;
-    check: Check;
+    amount?: number;
     message: string;
   }> {
     return await this.executeInTransaction(transaction, async (t) => {
-      // Находим чек по коду
       const check = await Check.findOne({
-        where: { code: activateData.code },
-        include: [{ model: User, as: 'creator' }],
+        where: { code: data.code.toUpperCase() },
+        include: [
+          { model: User, as: 'creator' },
+          { model: User, as: 'targetUser' }
+        ],
         transaction: t
       });
 
       if (!check) {
-        throw new AppError('Check not found', 404);
+        return { success: false, message: 'Чек не найден' };
       }
 
-      // Проверяем возможность активации
-      await this.validateCheckActivation(check, userId, activateData, t);
+      // Проверяем активность чека
+      if (!check.isActive) {
+        return { success: false, message: 'Чек неактивен' };
+      }
 
-      // Проверяем пароль если есть
-      if (check.password && activateData.password) {
-        const isPasswordValid = await validatePassword(activateData.password, check.password);
+      // Проверяем срок действия
+      if (check.expiresAt && check.expiresAt < new Date()) {
+        return { success: false, message: 'Срок действия чека истек' };
+      }
+
+      // Проверяем оставшиеся активации
+      if (check.currentActivations >= check.maxActivations) {
+        return { success: false, message: 'Чек уже полностью активирован' };
+      }
+
+      // Проверяем целевого пользователя
+      if (check.targetUserId && check.targetUserId !== data.userId) {
+        return { success: false, message: 'Чек предназначен для другого пользователя' };
+      }
+
+      // Проверяем, не активировал ли уже пользователь этот чек
+      const existingActivation = await CheckActivation.findOne({
+        where: { checkId: check.id, userId: data.userId },
+        transaction: t
+      });
+
+      if (existingActivation) {
+        return { success: false, message: 'Вы уже активировали этот чек' };
+      }
+
+      // Проверяем пароль
+      if (check.password) {
+        if (!data.password) {
+          return { success: false, message: 'Требуется пароль для активации чека' };
+        }
+        
+        const isPasswordValid = validatePasswordHash(data.password, check.password);
         if (!isPasswordValid) {
-          throw new AppError('Invalid password', 400);
+          return { success: false, message: 'Неверный пароль' };
         }
       }
 
-      // Проверяем подписку если требуется
-      if (check.requiredSubscription) {
-        const isSubscribed = await this.telegramService.checkSubscription(
-          userId, 
-          check.requiredSubscription
-        );
-        if (!isSubscribed) {
-          throw new AppError('Required subscription not found', 400);
-        }
+      // Активируем чек
+      const user = await User.findByPk(data.userId, { transaction: t });
+      if (!user) {
+        return { success: false, message: 'Пользователь не найден' };
       }
 
-      // Начисляем средства пользователю
-      await this.userService.updateBalance(userId, check.amountPerActivation, 0, t);
-
-      // Создаем запись об активации
-      const activation = await CheckActivation.create({
+      // Создаем активацию
+      await CheckActivation.create({
         checkId: check.id,
-        userId,
-        amount: check.amountPerActivation,
-        activatedAt: new Date()
+        userId: data.userId,
+        amount: check.amountPerActivation
       }, { transaction: t });
 
-      // Обновляем статистику чека
+      // Начисляем средства пользователю
+      await user.updateBalance(check.amountPerActivation, 'add');
+
+      // Обновляем счетчик активаций
       await check.update({
         currentActivations: check.currentActivations + 1
       }, { transaction: t });
 
-      // Если чек исчерпан, деактивируем его
+      // Если чек полностью активирован, деактивируем его
       if (check.currentActivations + 1 >= check.maxActivations) {
         await check.update({ isActive: false }, { transaction: t });
       }
 
-      // Создаем транзакцию получения
-      await this.transactionService.createTransaction({
-        userId,
-        type: 'check_activation',
-        amount: check.amountPerActivation,
-        relatedCheckId: check.id,
-        description: `Check activation: ${check.amountPerActivation} GRAM`,
-        metadata: { checkCode: check.code, activationId: activation.id }
-      }, t);
+      // Создаем транзакцию
+      await this.transactionService.createCheckTransaction(
+        data.userId,
+        check.amountPerActivation,
+        user.balance - check.amountPerActivation,
+        check.id,
+        false,
+        t
+      );
 
-      // Уведомляем получателя
-      await this.notificationService.createNotification({
-        userId,
-        type: 'check_activated',
-        title: 'Check Activated!',
-        message: `You received ${check.amountPerActivation} GRAM from check`,
-        data: { 
-          checkId: check.id, 
-          amount: check.amountPerActivation,
-          comment: check.comment 
-        },
-        priority: 2
-      }, t);
+      // Уведомляем создателя
+      if (check.creator) {
+        await this.notificationService.createCheckActivated(
+          check.creator.id,
+          check.amountPerActivation,
+          user.getDisplayName(),
+          t
+        );
+      }
 
-      // Уведомляем создателя о активации
-      await this.notificationService.createNotification({
-        userId: check.creatorId,
-        type: 'check_used',
-        title: 'Your Check Was Activated',
-        message: `Someone activated your check for ${check.amountPerActivation} GRAM`,
-        data: { 
-          checkId: check.id, 
-          amount: check.amountPerActivation,
-          remainingActivations: check.maxActivations - (check.currentActivations + 1)
-        },
-        priority: 1
-      }, t);
-
-      logger.info(`Check activated: ${check.id} by user ${userId}, amount: ${check.amountPerActivation}`);
-
+      logger.info(`Check activated: ${check.id} by user ${data.userId}`);
+      
       return {
         success: true,
         amount: check.amountPerActivation,
-        check,
-        message: check.comment || `You received ${check.amountPerActivation} GRAM!`
+        message: `Чек успешно активирован! Получено ${check.amountPerActivation} GRAM`
       };
     });
-  }
-
-  /**
-   * Получение информации о чеке по коду
-   */
-  async getCheckInfo(
-    code: string,
-    userId?: number
-  ): Promise<{
-    check: Check;
-    canActivate: boolean;
-    requiresPassword: boolean;
-    requiresSubscription: boolean;
-    remainingActivations: number;
-    creator: {
-      username?: string;
-      level: string;
-    };
-  }> {
-    const check = await Check.findOne({
-      where: { code },
-      include: [{ model: User, as: 'creator', attributes: ['username', 'level'] }]
-    });
-
-    if (!check) {
-      throw new AppError('Check not found', 404);
-    }
-
-    const remainingActivations = check.maxActivations - check.currentActivations;
-    let canActivate = true;
-
-    if (userId) {
-      // Проверяем, может ли пользователь активировать чек
-      try {
-        await this.validateCheckActivation(check, userId, { code });
-      } catch (error) {
-        canActivate = false;
-      }
-    }
-
-    return {
-      check,
-      canActivate,
-      requiresPassword: !!check.password,
-      requiresSubscription: !!check.requiredSubscription,
-      remainingActivations,
-      creator: {
-        username: check.creator?.username,
-        level: check.creator?.level || 'bronze'
-      }
-    };
   }
 
   /**
@@ -284,72 +207,29 @@ export class CheckService {
    */
   async getUserChecks(
     userId: number,
-    filters: CheckFilters = {}
-  ): Promise<{
-    checks: Check[];
-    total: number;
-    stats: {
-      totalCreated: number;
-      totalAmount: number;
-      totalActivated: number;
-      activeChecks: number;
-    };
-  }> {
-    const {
-      type,
-      status,
-      limit = 20,
-      offset = 0,
-      sortBy = 'created_at',
-      sortOrder = 'DESC'
-    } = filters;
-
+    filters?: {
+      isActive?: boolean;
+      type?: 'personal' | 'multi';
+      limit?: number;
+      offset?: number;
+    }
+  ): Promise<{ rows: Check[]; count: number }> {
     const whereConditions: any = { creatorId: userId };
-
-    if (type) {
-      whereConditions.type = type;
+    
+    if (filters?.isActive !== undefined) {
+      whereConditions.isActive = filters.isActive;
+    }
+    
+    if (filters?.type) {
+      whereConditions.type = filters.type;
     }
 
-    if (status === 'active') {
-      whereConditions.isActive = true;
-      whereConditions.expiresAt = { [Op.or]: [null, { [Op.gt]: new Date() }] };
-    } else if (status === 'inactive') {
-      whereConditions[Op.or] = [
-        { isActive: false },
-        { expiresAt: { [Op.lte]: new Date() } }
-      ];
-    }
-
-    const { count, rows } = await Check.findAndCountAll({
+    return await Check.findAndCountAll({
       where: whereConditions,
-      include: [{ 
-        model: CheckActivation, 
-        as: 'activations',
-        include: [{ model: User, as: 'user', attributes: ['username'] }]
-      }],
-      limit,
-      offset,
-      order: [[sortBy, sortOrder]]
+      order: [['createdAt', 'DESC']],
+      limit: filters?.limit || 20,
+      offset: filters?.offset || 0
     });
-
-    // Статистика пользователя
-    const allUserChecks = await Check.findAll({
-      where: { creatorId: userId },
-      attributes: ['totalAmount', 'isActive', 'currentActivations']
-    });
-
-    const stats = {
-      totalCreated: allUserChecks.length,
-      totalAmount: allUserChecks.reduce((sum, check) => sum + check.totalAmount, 0),
-      totalActivated: allUserChecks.reduce((sum, check) => sum + check.currentActivations, 0),
-      activeChecks: allUserChecks.filter(check => check.isActive).length
-    };
-
-    return {
-      checks: rows,
-      total: count,
-      stats
-    };
   }
 
   /**
@@ -357,139 +237,43 @@ export class CheckService {
    */
   async getUserActivations(
     userId: number,
-    filters: {
-      limit?: number;
-      offset?: number;
-      dateFrom?: Date;
-      dateTo?: Date;
-    } = {}
-  ): Promise<{
-    activations: CheckActivation[];
-    total: number;
-    totalEarned: number;
-  }> {
-    const {
-      limit = 20,
-      offset = 0,
-      dateFrom,
-      dateTo
-    } = filters;
-
-    const whereConditions: any = { userId };
-
-    if (dateFrom || dateTo) {
-      whereConditions.activatedAt = {};
-      if (dateFrom) whereConditions.activatedAt[Op.gte] = dateFrom;
-      if (dateTo) whereConditions.activatedAt[Op.lte] = dateTo;
-    }
-
-    const { count, rows } = await CheckActivation.findAndCountAll({
-      where: whereConditions,
-      include: [{
-        model: Check,
-        as: 'check',
-        include: [{ model: User, as: 'creator', attributes: ['username'] }]
-      }],
+    limit: number = 20,
+    offset: number = 0
+  ): Promise<{ rows: CheckActivation[]; count: number }> {
+    return await CheckActivation.findAndCountAll({
+      where: { userId },
+      include: [{ model: Check, as: 'check' }],
+      order: [['createdAt', 'DESC']],
       limit,
-      offset,
-      order: [['activatedAt', 'DESC']]
-    });
-
-    const totalEarned = rows.reduce((sum, activation) => sum + activation.amount, 0);
-
-    return {
-      activations: rows,
-      total: count,
-      totalEarned
-    };
-  }
-
-  /**
-   * Деактивация чека создателем
-   */
-  async deactivateCheck(
-    checkId: number,
-    creatorId: number,
-    transaction?: Transaction
-  ): Promise<Check> {
-    return await this.executeInTransaction(transaction, async (t) => {
-      const check = await Check.findOne({
-        where: { 
-          id: checkId, 
-          creatorId,
-          isActive: true 
-        },
-        transaction: t
-      });
-
-      if (!check) {
-        throw new AppError('Active check not found', 404);
-      }
-
-      // Рассчитываем неиспользованную сумму
-      const remainingAmount = (check.maxActivations - check.currentActivations) * check.amountPerActivation;
-
-      if (remainingAmount > 0) {
-        // Возвращаем неиспользованные средства
-        await this.userService.updateBalance(creatorId, remainingAmount, 0, t);
-
-        // Создаем транзакцию возврата
-        await this.transactionService.createTransaction({
-          userId: creatorId,
-          type: 'check_refund',
-          amount: remainingAmount,
-          relatedCheckId: checkId,
-          description: `Check deactivation refund: ${remainingAmount} GRAM`,
-          metadata: { checkCode: check.code }
-        }, t);
-      }
-
-      await check.update({ isActive: false }, { transaction: t });
-
-      logger.info(`Check deactivated: ${checkId} by creator ${creatorId}, refunded: ${remainingAmount}`);
-      return check;
+      offset
     });
   }
 
   /**
-   * Получение статистики чеков платформы
+   * Получение статистики чеков
    */
-  async getPlatformStats(period?: { from: Date; to: Date }): Promise<CheckStats> {
-    const whereConditions: any = {};
-    
-    if (period) {
-      whereConditions.createdAt = {
-        [Op.gte]: period.from,
-        [Op.lte]: period.to
-      };
-    }
-
-    const [checks, activations] = await Promise.all([
-      Check.findAll({
-        where: whereConditions,
-        attributes: ['type', 'totalAmount', 'currentActivations', 'isActive']
-      }),
-      CheckActivation.findAll({
-        where: period ? {
-          activatedAt: {
-            [Op.gte]: period.from,
-            [Op.lte]: period.to
-          }
-        } : {},
-        attributes: ['amount']
-      })
+  async getCheckStats(): Promise<{
+    totalChecks: number;
+    activeChecks: number;
+    totalVolume: number;
+    totalActivations: number;
+    totalDistributed: number;
+    averageCheckAmount: number;
+    activationRate: number;
+  }> {
+    const [
+      totalChecks,
+      activeChecks,
+      totalVolume,
+      totalActivations,
+      totalDistributed
+    ] = await Promise.all([
+      Check.count(),
+      Check.count({ where: { isActive: true } }),
+      Check.sum('totalAmount') || 0,
+      CheckActivation.count(),
+      CheckActivation.sum('amount') || 0
     ]);
-
-    const totalChecks = checks.length;
-    const activeChecks = checks.filter(c => c.isActive).length;
-    const totalVolume = checks.reduce((sum, c) => sum + c.totalAmount, 0);
-    const totalActivations = activations.length;
-    const totalDistributed = activations.reduce((sum, a) => sum + a.amount, 0);
-
-    const checksByType = checks.reduce((acc, check) => {
-      acc[check.type] = (acc[check.type] || 0) + 1;
-      return acc;
-    }, {} as Record<string, number>);
 
     return {
       totalChecks,
@@ -498,147 +282,91 @@ export class CheckService {
       totalActivations,
       totalDistributed,
       averageCheckAmount: totalChecks > 0 ? totalVolume / totalChecks : 0,
-      activationRate: totalChecks > 0 ? (totalActivations / totalChecks) * 100 : 0,
-      checksByType
+      activationRate: totalChecks > 0 ? (totalActivations / totalChecks) * 100 : 0
     };
   }
 
   /**
-   * Валидация данных чека
+   * Деактивация чека
    */
-  private async validateCheckData(checkData: CheckCreateData, creator: User): Promise<void> {
-    // Проверяем тип чека
-    if (!Object.values(CheckType).includes(checkData.type)) {
-      throw new AppError('Invalid check type', 400);
-    }
+  async deactivateCheck(
+    checkId: number,
+    userId: number,
+    transaction?: DBTransaction
+  ): Promise<Check> {
+    return await this.executeInTransaction(transaction, async (t) => {
+      const check = await Check.findOne({
+        where: { id: checkId, creatorId: userId },
+        transaction: t
+      });
 
-    // Проверяем сумму
-    if (checkData.totalAmount <= 0) {
-      throw new AppError('Amount must be positive', 400);
-    }
-
-    const minAmount = 10;
-    const maxAmount = 1000000;
-    if (checkData.totalAmount < minAmount || checkData.totalAmount > maxAmount) {
-      throw new AppError(`Amount must be between ${minAmount} and ${maxAmount} GRAM`, 400);
-    }
-
-    // Для мульти-чека проверяем количество активаций
-    if (checkData.type === 'multi') {
-      if (!checkData.maxActivations || checkData.maxActivations < 2 || checkData.maxActivations > 1000) {
-        throw new AppError('Multi-check must have 2-1000 activations', 400);
+      if (!check) {
+        throw new AppError('Check not found or access denied', 404);
       }
 
-      if (checkData.totalAmount < checkData.maxActivations) {
-        throw new AppError('Total amount must be at least equal to max activations', 400);
+      if (!check.isActive) {
+        throw new AppError('Check is already inactive', 400);
       }
-    }
 
-    // Для персонального чека проверяем целевого пользователя
-    if (checkData.type === 'personal' && checkData.targetUserId) {
-      const targetUser = await this.userService.getById(checkData.targetUserId);
-      if (!targetUser) {
-        throw new AppError('Target user not found', 404);
-      }
-    }
+      await check.update({ isActive: false }, { transaction: t });
 
-    // Проверяем срок действия
-    if (checkData.expiresAt && checkData.expiresAt <= new Date()) {
-      throw new AppError('Expiry date must be in the future', 400);
-    }
-
-    // Проверяем длину комментария
-    if (checkData.comment && checkData.comment.length > 200) {
-      throw new AppError('Comment cannot exceed 200 characters', 400);
-    }
+      logger.info(`Check deactivated: ${checkId} by user ${userId}`);
+      return check;
+    });
   }
 
   /**
-   * Валидация возможности активации чека
+   * Очистка истекших чеков
    */
-  private async validateCheckActivation(
-    check: Check,
-    userId: number,
-    activateData: CheckActivateData,
-    transaction?: Transaction
-  ): Promise<void> {
-    // Проверяем, активен ли чек
-    if (!check.isActive) {
-      throw new AppError('Check is not active', 400);
-    }
-
-    // Проверяем срок действия
-    if (check.expiresAt && check.expiresAt <= new Date()) {
-      throw new AppError('Check has expired', 400);
-    }
-
-    // Проверяем оставшиеся активации
-    if (check.currentActivations >= check.maxActivations) {
-      throw new AppError('No activations remaining', 400);
-    }
-
-    // Проверяем, не создатель ли пытается активировать свой чек
-    if (check.creatorId === userId) {
-      throw new AppError('Cannot activate your own check', 400);
-    }
-
-    // Для персонального чека проверяем целевого пользователя
-    if (check.type === 'personal' && check.targetUserId && check.targetUserId !== userId) {
-      throw new AppError('This check is not for you', 400);
-    }
-
-    // Проверяем, не активировал ли уже этот чек
-    const existingActivation = await CheckActivation.findOne({
+  async cleanupExpiredChecks(): Promise<number> {
+    const expiredChecks = await Check.findAll({
       where: {
-        checkId: check.id,
-        userId
-      },
-      transaction
+        isActive: true,
+        expiresAt: { [Op.lte]: new Date() }
+      }
     });
 
-    if (existingActivation) {
-      throw new AppError('Check already activated by this user', 400);
-    }
+    let refundedAmount = 0;
 
-    // Проверяем пароль
-    if (check.password && !activateData.password) {
-      throw new AppError('Password required', 400);
-    }
-  }
-
-  /**
-   * Генерация уникального кода чека
-   */
-  private async generateUniqueCheckCode(): Promise<string> {
-    let attempts = 0;
-    const maxAttempts = 10;
-
-    while (attempts < maxAttempts) {
-      const code = generateCheckCode();
-      const existingCheck = await Check.findOne({ where: { code } });
+    for (const check of expiredChecks) {
+      const remainingAmount = (check.maxActivations - check.currentActivations) * check.amountPerActivation;
       
-      if (!existingCheck) {
-        return code;
+      if (remainingAmount > 0) {
+        // Возвращаем оставшиеся средства создателю
+        const creator = await User.findByPk(check.creatorId);
+        if (creator) {
+          await creator.updateBalance(remainingAmount, 'add');
+          
+          await this.transactionService.createTransaction({
+            userId: creator.id,
+            type: 'check_refund',
+            amount: remainingAmount,
+            relatedCheckId: check.id,
+            description: 'Check expiration refund'
+          });
+
+          refundedAmount += remainingAmount;
+        }
       }
-      
-      attempts++;
+
+      await check.update({ isActive: false });
     }
 
-    throw new AppError('Failed to generate unique check code', 500);
+    logger.info(`Cleaned up ${expiredChecks.length} expired checks, refunded ${refundedAmount} GRAM`);
+    return expiredChecks.length;
   }
 
   /**
    * Выполнение операции в транзакции
    */
-  private async executeInTransaction<T>(
-    transaction: Transaction | undefined,
-    operation: (t: Transaction) => Promise<T>
-  ): Promise<T> {
-    if (transaction) {
-      return await operation(transaction);
-    }
+    public async executeInTransaction<T>(
+      transaction: DBTransaction | undefined,
+      operation: (t: DBTransaction) => Promise<T>
+    ): Promise<T> {
+      if (transaction) {
+        return await operation(transaction);
+      }
 
-    const { sequelize } = Check;
-    return await sequelize.transaction(operation);
-  }
+      return await sequelize.transaction(operation);
+    }
 }

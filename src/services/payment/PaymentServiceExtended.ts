@@ -2,10 +2,10 @@
 import { Transaction, Op, QueryTypes } from 'sequelize';
 import { PaymentService } from './PaymentService';
 import { UserService } from '../user';
-import { TransactionService } from '../transaction';
-import { NotificationService } from '../notification';
+import { TransactionService } from '../transaction/TransactionService';
+import { NotificationService } from '../notification/NotificationService';
 import { User, Transaction as TransactionModel } from '../../database/models';
-import { sequelize } from '../../database/config';
+import { sequelize } from '../../database/config/database';
 import { 
   PaymentAnalytics,
   PaymentReport,
@@ -26,7 +26,6 @@ import {
 } from './types';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { encryptSensitiveData, decryptSensitiveData } from '../../utils/helpers';
 
 export class PaymentServiceExtended extends PaymentService {
   private providerConfig: PaymentProviderConfig;

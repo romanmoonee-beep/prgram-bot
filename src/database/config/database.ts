@@ -30,8 +30,8 @@ const config = {
   }
 };
 
-// Создание экземпляра Sequelize
-export const sequelize = new Sequelize(
+// Создание экземпляра Sequelize с явным типом
+export const sequelize: Sequelize = new Sequelize(
   config.database,
   config.username,
   config.password,

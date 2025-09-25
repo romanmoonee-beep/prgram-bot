@@ -174,6 +174,7 @@ export interface BulkCheckCreationData {
     targetUserId?: number;
   }>;
   commonSettings: {
+    maxActivations: number;
     type: CheckType;
     password?: string;
     requiredSubscription?: string;
@@ -348,7 +349,7 @@ export interface CheckFilters {
   hasPassword?: boolean;
   hasSubscriptionRequirement?: boolean;
   amountFrom?: number;
-  amountTo?: Date;
+  amountTo?: number;
   dateFrom?: Date;
   dateTo?: Date;
   limit?: number;
@@ -493,6 +494,7 @@ export interface BulkCheckCreationData {
     password?: string;
     requiredSubscription?: string;
     expiresAt?: Date;
+    maxActivations: number;
   };
 }
 
@@ -540,19 +542,6 @@ export interface CheckServiceConfig {
     requireCaptchaForLargeAmounts: boolean;
     largeAmountThreshold: number;
   };
-}
-
-// Перечисления
-export enum CheckType {
-  PERSONAL = 'personal', // Для конкретного пользователя
-  MULTI = 'multi' // Для множественных активаций
-}
-
-export enum CheckStatus {
-  ACTIVE = 'active',
-  INACTIVE = 'inactive',
-  EXPIRED = 'expired',
-  EXHAUSTED = 'exhausted' // Все активации использованы
 }
 
 // События системы чеков
@@ -603,13 +592,6 @@ export interface SuspiciousCheckActivityEvent {
   severity: 'low' | 'medium' | 'high';
   timestamp: Date;
 }
-
-export type CheckServiceEvent = 
-  | CheckCreatedEvent
-  | CheckActivatedEvent
-  | CheckExpiredEvent
-  | CheckDeactivatedEvent
-  | SuspiciousCheckActivityEvent;
 
 // API ответы
 export interface CheckListResponse {
