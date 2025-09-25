@@ -40,7 +40,7 @@ class TelegramApiWorker {
         default:
           throw new Error(`Unknown Telegram API action: ${action}`);
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`Telegram API worker error for action ${action}:`, error);
       
       // Если это ошибка rate limit, откладываем job
@@ -73,7 +73,7 @@ class TelegramApiWorker {
       const isSubscribed = ['creator', 'administrator', 'member'].includes(chatMember.status);
       
       return { success: true, isSubscribed, status: chatMember.status };
-    } catch (error) {
+    } catch (error: any) {
       // Если пользователь не найден или канал недоступен
       if (error.error_code === 400 || error.error_code === 403) {
         return { success: true, isSubscribed: false, error: error.description };

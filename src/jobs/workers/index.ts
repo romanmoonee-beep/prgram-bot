@@ -7,13 +7,18 @@ import TelegramApiWorker from './telegramApiWorker';
 import AnalyticsWorker from './analyticsWorker';
 import CleanupWorker from './cleanupWorker';
 
+// Интерфейс для worker с методом stop
+interface Worker {
+  stop?: () => Promise<void>;
+}
+
 // Класс для управления всеми workers
 export class WorkerManager {
   private notificationWorker: NotificationWorker;
   private telegramApiWorker: TelegramApiWorker;
   private analyticsWorker: AnalyticsWorker;
   private cleanupWorker: CleanupWorker;
-  private workers: any[] = [];
+  private workers: Worker[] = [];
 
   constructor(bot: Bot) {
     this.initializeWorkers(bot);
@@ -73,20 +78,24 @@ export class WorkerManager {
   }
 
   // Методы для доступа к конкретным workers
-  getNotificationWorker() {
+  getNotificationWorker(): NotificationWorker {
     return this.notificationWorker;
   }
 
-  getTelegramApiWorker() {
+  getTelegramApiWorker(): TelegramApiWorker {
     return this.telegramApiWorker;
   }
 
-  getAnalyticsWorker() {
+  getAnalyticsWorker(): AnalyticsWorker {
     return this.analyticsWorker;
   }
 
-  getCleanupWorker() {
+  getCleanupWorker(): CleanupWorker {
     return this.cleanupWorker;
+  }
+
+  getTaskCheckWorker() {
+    return taskCheckWorker;
   }
 }
 

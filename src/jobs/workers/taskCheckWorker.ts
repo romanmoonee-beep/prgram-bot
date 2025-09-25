@@ -115,7 +115,7 @@ class TaskCheckWorker {
         default:
           return { success: false, error: 'Unknown check type' };
       }
-    } catch (error) {
+    } catch (error: any) {
       logger.error(`Check ${checkType} failed for user ${userId}:`, error);
       return { success: false, error: error.message };
     }
@@ -136,7 +136,7 @@ class TaskCheckWorker {
         success: isSubscribed,
         error: isSubscribed ? null : 'User is not subscribed to the channel'
       };
-    } catch (error) {
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
@@ -156,7 +156,7 @@ class TaskCheckWorker {
         success: isMember,
         error: isMember ? null : 'User is not a member of the group'
       };
-    } catch (error) {
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
@@ -174,7 +174,7 @@ class TaskCheckWorker {
         success: true,
         error: null
       };
-    } catch (error) {
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }
@@ -191,7 +191,7 @@ class TaskCheckWorker {
         success: true,
         error: null
       };
-    } catch (error) {
+    } catch (error: any) {
       return { success: false, error: error.message };
     }
   }

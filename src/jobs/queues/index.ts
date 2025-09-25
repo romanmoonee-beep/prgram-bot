@@ -3,7 +3,11 @@ import Queue from 'bull';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 import { TaskExecution, User, Task } from '../../database/models';
+<<<<<<< HEAD
 import { telegramService } from '../../services/telegram';
+=======
+import { telegramService } from '../../services/telegram/TelegramService';
+>>>>>>> 9cc5691 (5-commit)
 
 // Создание очередей
 const taskCheckQueue = new Queue('task check', config.redis.url);
@@ -312,4 +316,8 @@ export class QueueManager {
 
 // Экспорт для использования в других частях приложения
 export { taskCheckQueue, notificationQueue, cleanupQueue };
+<<<<<<< HEAD
 export default QueueManager;
+=======
+export default QueueManager;
+>>>>>>> 9cc5691 (5-commit)

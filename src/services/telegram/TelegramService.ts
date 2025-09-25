@@ -10,9 +10,8 @@ import {
   MessageInfo,
   ChatInfo
 } from './types';
-import { AppError } from '../../utils/errors';
+import { AppError } from '../../utils/errors/init';
 import { logger } from '../../utils/logger';
-import { parseChannelUrl, parseChatUrl, extractUsernameFromUrl } from '../../utils/helpers';
 
 export class TelegramService {
   private bot: Bot;

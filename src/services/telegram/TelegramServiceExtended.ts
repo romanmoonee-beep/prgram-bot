@@ -356,14 +356,7 @@ export class TelegramServiceExtended extends TelegramService {
   }
 
   /**
-   * Настройка rate limiting
-   */
-  private setupRateLimiting(): void {
-    // Очистка счетчиков каждую минуту
-    setInterval(() => {
-      const now = Date.now();
-      for (const [key, data] of this.rateLimitCache) {
-  /**
+
    * Настройка rate limiting
    */
   private setupRateLimiting(): void {
@@ -377,6 +370,7 @@ export class TelegramServiceExtended extends TelegramService {
       }
     }, 60000);
   }
+
 
   /**
    * Проверка rate limit

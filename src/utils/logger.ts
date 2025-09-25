@@ -506,4 +506,8 @@ class Logger {
 
 // Экспортируем singleton
 export const logger = new Logger();
+<<<<<<< HEAD
 export default logger;
+=======
+export default logger;
+>>>>>>> 9cc5691 (5-commit)

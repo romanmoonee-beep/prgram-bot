@@ -100,4 +100,8 @@ export function formatTimeRemaining(endDate: Date): string {
   } else if (hours > 0) {
     return `${hours}ч ${minutes}м`;
   } else {
+<<<<<<< HEAD
     return `${minutes}м`;
+=======
+    return `${minutes}м`;
+>>>>>>> 9cc5691 (5-commit)

@@ -245,7 +245,11 @@ export function setupErrorHandlers(bot: Bot) {
     // Логируем действие пользователя если доступно
     if (ctx.session?.user) {
       await logger.userAction(ctx.session.user.telegramId, 'bot_error', {
+<<<<<<< HEAD
         error: error.message,
+=======
+        error: error,
+>>>>>>> 9cc5691 (5-commit)
         updateId: ctx.update.update_id
       });
     }
@@ -324,4 +328,8 @@ export async function setupBackgroundJobs() {
   }
 }
 
+<<<<<<< HEAD
 export default setupHandlers;
+=======
+export default setupHandlers;
+>>>>>>> 9cc5691 (5-commit)

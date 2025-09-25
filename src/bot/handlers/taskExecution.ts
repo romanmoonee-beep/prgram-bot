@@ -5,7 +5,7 @@ import { logger } from '../../utils/logger';
 import { EMOJIS, TASK_TYPES, EXECUTION_STATUSES } from '../../utils/constants';
 import { getConfirmKeyboard, getBackKeyboard } from '../keyboards/main';
 import { formatTimeRemaining } from '../../utils/helpers/init';
-import { Task, TaskExecution, User } from '../../database/models';
+import { Task, TaskExecution, User, Transaction } from '../../database/models'; // Добавлен Transaction
 import { QueueManager } from '../../jobs/queues';
 
 export function setupTaskExecutionHandlers(bot: Bot) {
@@ -332,7 +332,9 @@ export function setupTaskExecutionHandlers(bot: Bot) {
       const user = ctx.session!.user!;
       
       if (user.currentState?.startsWith('awaiting_screenshot_')) {
-        await ctx.reply(`📷 **Ожидается скриншот**\n\nПожалуйста, отправьте изображение, а не текст.\n\nЕсли хотите добавить комментарий - отправьте его вместе со скриншотом как подпись к фото.`);
+        await ctx.reply(`📷 **Ожидается скриншот**\n\nПожалуйста, отправьте изображение, а не текст.\n\nЕсли хотите добавить комментарий - отправьте его вместе со скриншотом как подпись к фото.`, {
+          parse_mode: 'Markdown'
+        });
         return;
       }
       
@@ -344,6 +346,255 @@ export function setupTaskExecutionHandlers(bot: Bot) {
   });
 
   logger.info('✅ Task execution handlers configured');
+}
+
+// Добавить в конце файла setupTaskModerationHandlers:
+export function setupTaskModerationHandlers(bot: Bot) {
+  
+  // Принятие задания автором
+  bot.callbackQuery(/^approve_(\d+)$/, requireAuth, async (ctx) => {
+    try {
+      const executionId = parseInt(ctx.match![1]);
+      const user = ctx.session!.user!;
+
+      const execution = await TaskExecution.findByPk(executionId, {
+        include: [
+          { model: Task, as: 'task' },
+          { model: User, as: 'user' }
+        ]
+      });
+
+      if (!execution || !execution.task) {
+        await ctx.answerCallbackQuery('❌ Выполнение задания не найдено');
+        return;
+      }
+
+      // Проверяем, что текущий пользователь - автор задания
+      if (execution.task.authorId !== user.id) {
+        await ctx.answerCallbackQuery('❌ Вы не автор этого задания');
+        return;
+      }
+
+      // Проверяем статус
+      if (!execution.isInReview()) {
+        await ctx.answerCallbackQuery('❌ Задание не находится на проверке');
+        return;
+      }
+
+      // Принимаем задание
+      await execution.approve(user.id);
+
+      // Начисляем награду исполнителю
+      if (execution.user) {
+        await execution.user.updateBalance(execution.rewardAmount, 'add');
+        
+        // Создаем транзакцию
+        await Transaction.createTaskReward(
+          execution.user.id,
+          execution.task.id,
+          execution.rewardAmount,
+          (execution.user.balance || 0) - execution.rewardAmount
+        );
+
+        // Обновляем счетчики
+        await execution.task.incrementConversions();
+        execution.user.tasksCompleted = (execution.user.tasksCompleted || 0) + 1;
+        await execution.user.save();
+
+        // Помечаем как оплаченное
+        await execution.markRewardPaid();
+
+        // Уведомляем исполнителя
+        try {
+          await ctx.api.sendMessage(
+            execution.user.telegramId,
+            `✅ **Задание принято!**\n\n` +
+            `${execution.task.getTypeIcon()} ${execution.task.title}\n` +
+            `💰 Получено: ${execution.rewardAmount.toLocaleString()} GRAM\n` +
+            `💳 Новый баланс: ${execution.user.balance?.toLocaleString()} GRAM\n\n` +
+            `🎉 Поздравляем с успешным выполнением!`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (notifyError) {
+          logger.warn('Failed to notify task executor:', notifyError);
+        }
+      }
+
+      await ctx.editMessageText(
+        `✅ **Задание принято**\n\n` +
+        `Исполнитель получил ${execution.rewardAmount.toLocaleString()} GRAM\n` +
+        `Задание помечено как выполненное.`,
+        { parse_mode: 'Markdown' }
+      );
+
+      await ctx.answerCallbackQuery('✅ Задание принято и оплачено');
+
+      logger.userAction(user.telegramId, 'task_execution_approved', {
+        executionId,
+        taskId: execution.task.id,
+        reward: execution.rewardAmount
+      });
+
+    } catch (error) {
+      logger.error('Approve task execution error:', error);
+      await ctx.answerCallbackQuery('❌ Произошла ошибка');
+    }
+  });
+
+  // Отклонение задания автором
+  bot.callbackQuery(/^reject_(\d+)$/, requireAuth, async (ctx) => {
+    try {
+      const executionId = parseInt(ctx.match![1]);
+      const user = ctx.session!.user!;
+
+      const execution = await TaskExecution.findByPk(executionId, {
+        include: [
+          { model: Task, as: 'task' },
+          { model: User, as: 'user' }
+        ]
+      });
+
+      if (!execution || !execution.task) {
+        await ctx.answerCallbackQuery('❌ Выполнение задания не найдено');
+        return;
+      }
+
+      if (execution.task.authorId !== user.id) {
+        await ctx.answerCallbackQuery('❌ Вы не автор этого задания');
+        return;
+      }
+
+      if (!execution.isInReview()) {
+        await ctx.answerCallbackQuery('❌ Задание не находится на проверке');
+        return;
+      }
+
+      // Устанавливаем состояние для указания причины отклонения
+      user.currentState = JSON.stringify({ action: 'rejecting_execution', executionId });
+      await user.save();
+
+      let message = `❌ **ОТКЛОНЕНИЕ ЗАДАНИЯ**\n\n`;
+      message += `Укажите причину отклонения задания:\n\n`;
+      message += `**Популярные причины:**\n`;
+      message += `• Неверный скриншот\n`;
+      message += `• Не выполнены условия\n`;
+      message += `• Фейковое выполнение\n`;
+      message += `• Неполная информация\n\n`;
+      message += `Напишите причину отклонения:`;
+
+      const keyboard = {
+        inline_keyboard: [
+          [
+            { text: '📷 Неверный скриншот', callback_data: `reject_reason_${executionId}_screenshot` },
+            { text: '❌ Не выполнены условия', callback_data: `reject_reason_${executionId}_conditions` }
+          ],
+          [
+            { text: '🎭 Фейковое выполнение', callback_data: `reject_reason_${executionId}_fake` },
+            { text: '📝 Неполная информация', callback_data: `reject_reason_${executionId}_incomplete` }
+          ],
+          [
+            { text: '⬅️ Назад', callback_data: `execution_${executionId}` }
+          ]
+        ]
+      };
+
+      await ctx.editMessageText(message, {
+        reply_markup: keyboard,
+        parse_mode: 'Markdown'
+      });
+
+      await ctx.answerCallbackQuery();
+
+    } catch (error) {
+      logger.error('Reject task execution error:', error);
+      await ctx.answerCallbackQuery('❌ Произошла ошибка');
+    }
+  });
+
+  // Обработка готовых причин отклонения
+  bot.callbackQuery(/^reject_reason_(\d+)_(.+)$/, requireAuth, async (ctx) => {
+    try {
+      const executionId = parseInt(ctx.match![1]);
+      const reasonKey = ctx.match![2];
+      const user = ctx.session!.user!;
+
+      const reasonTexts: { [key: string]: string } = {
+        'screenshot': 'Неверный скриншот',
+        'conditions': 'Не выполнены условия задания',
+        'fake': 'Фейковое выполнение',
+        'incomplete': 'Неполная информация'
+      };
+
+      const rejectionReason = reasonTexts[reasonKey] || 'Не указана';
+
+      const execution = await TaskExecution.findByPk(executionId, {
+        include: [
+          { model: Task, as: 'task' },
+          { model: User, as: 'user' }
+        ]
+      });
+
+      if (!execution || !execution.task) {
+        await ctx.answerCallbackQuery('❌ Выполнение задания не найдено');
+        return;
+      }
+
+      if (execution.task.authorId !== user.id) {
+        await ctx.answerCallbackQuery('❌ Вы не автор этого задания');
+        return;
+      }
+
+      if (!execution.isInReview()) {
+        await ctx.answerCallbackQuery('❌ Задание не находится на проверке');
+        return;
+      }
+
+      // Отклоняем задание
+      await execution.reject(user.id, rejectionReason);
+
+      // Очищаем состояние пользователя
+      user.currentState = null;
+      await user.save();
+
+      // Уведомляем исполнителя
+      if (execution.user) {
+        try {
+          await ctx.api.sendMessage(
+            execution.user.telegramId,
+            `❌ **Задание отклонено**\n\n` +
+            `${execution.task.getTypeIcon()} ${execution.task.title}\n` +
+            `💰 Награда: ${execution.rewardAmount.toLocaleString()} GRAM\n\n` +
+            `📝 **Причина отклонения:**\n${rejectionReason}\n\n` +
+            `💡 Вы можете попробовать выполнить задание заново, исправив указанные недостатки.`,
+            { parse_mode: 'Markdown' }
+          );
+        } catch (notifyError) {
+          logger.warn('Failed to notify task executor about rejection:', notifyError);
+        }
+      }
+
+      await ctx.editMessageText(
+        `❌ **Задание отклонено**\n\n` +
+        `Причина: ${rejectionReason}\n` +
+        `Исполнитель уведомлен об отклонении.`,
+        { parse_mode: 'Markdown' }
+      );
+
+      await ctx.answerCallbackQuery('❌ Задание отклонено');
+
+      logger.userAction(user.telegramId, 'task_execution_rejected', {
+        executionId,
+        taskId: execution.task.id,
+        reason: rejectionReason
+      });
+
+    } catch (error) {
+      logger.error('Reject reason handler error:', error);
+      await ctx.answerCallbackQuery('❌ Произошла ошибка');
+    }
+  });
+
+  logger.info('✅ Task moderation handlers configured');
 }
 
 // Вспомогательные функции

@@ -244,4 +244,8 @@ User.hasMany(UserAction, {
   as: 'actions'
 });
 
+<<<<<<< HEAD
 export default UserAction;
+=======
+export default UserAction;
+>>>>>>> 9cc5691 (5-commit)

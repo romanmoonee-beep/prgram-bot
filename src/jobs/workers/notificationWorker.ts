@@ -92,7 +92,7 @@ class NotificationWorker {
 
       await this.bot.api.sendMessage(telegramId, message, options);
       return true;
-    } catch (error) {
+    } catch (error: any) {
       // Проверяем, заблокирован ли бот пользователем
       if (error.error_code === 403) {
         logger.warn(`Bot blocked by user ${telegramId}`);
