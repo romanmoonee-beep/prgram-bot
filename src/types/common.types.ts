@@ -388,18 +388,3 @@ export interface MiddlewareContext {
 }
 
 export type MiddlewareFunction = (ctx: any, next: () => Promise<void>) => Promise<void>;
-
-export default {
-  // Экспортируем основные типы для удобства использования
-  ApiResponse,
-  PaginationOptions,
-  PaginatedResponse,
-  ValidationResult,
-  NotificationData,
-  TelegramUser,
-  TelegramChat,
-  WebhookUpdate,
-  BotConfig,
-  QueueJob,
-  LogEntry
-};

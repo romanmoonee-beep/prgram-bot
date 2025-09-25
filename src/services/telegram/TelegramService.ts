@@ -15,7 +15,7 @@ import { logger } from '../../utils/logger';
 
 export class TelegramService {
   private bot: Bot;
-  private apiClient: AxiosInstance;
+  protected apiClient: AxiosInstance;
   private botToken: string;
 
   constructor(botToken: string) {
@@ -172,7 +172,7 @@ export class TelegramService {
       return {
         isAdded,
         botStatus: member.status,
-        permissions: member.status === 'administrator' ? member.can_manage_chat : false,
+        permissions: member.status === "administrator" ? (member.canManageChat ?? false) : false,
         chatInfo: {
           id: chatId.toString(),
           title: await this.getChatTitle(chatId),
@@ -184,7 +184,7 @@ export class TelegramService {
       logger.error(`Bot check error for ${targetBotUsername} in ${chatId}:`, error);
       return {
         isAdded: false,
-        botStatus: 'not_member',
+        botStatus: 'left',
         permissions: false,
         error: 'Failed to check bot presence'
       };
@@ -618,7 +618,7 @@ export class TelegramService {
       return 0;
     }
   }
-
+  
   /**
    * Обработка ошибок проверки подписки
    */
@@ -633,7 +633,7 @@ export class TelegramService {
       // Пользователь не найден в чате или чат не существует
       return {
         isSubscribed: false,
-        status: 'not_member',
+        status: 'left',
         error: 'User not found in chat or chat does not exist'
       };
     }
@@ -642,14 +642,14 @@ export class TelegramService {
       // Бот не имеет доступа к чату
       return {
         isSubscribed: false,
-        status: 'not_member',
+        status: 'left',
         error: 'Bot has no access to this chat'
       };
     }
 
     return {
       isSubscribed: false,
-      status: 'not_member',
+      status: 'left',
       error: 'Failed to check subscription'
     };
   }
@@ -708,4 +708,24 @@ export class TelegramService {
       throw error;
     }
   }
+}
+
+function mapStatus(status: ChatMember["status"]): "not_member" | "member" | "admin" | "owner" {
+  switch (status) {
+    case "creator":
+      return "owner";
+    case "administrator":
+      return "admin";
+    case "member":
+      return "member";
+    case "restricted":
+    case "left":
+    case "kicked":
+      return "not_member";
+  }
+}
+
+export function CreateTelegramInstance() {
+  const instance = new TelegramService(process.env.TELEGRAM_BOT_TOKEN!);
+  return instance;
 }

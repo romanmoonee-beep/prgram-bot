@@ -14,10 +14,10 @@ interface Worker {
 
 // Класс для управления всеми workers
 export class WorkerManager {
-  private notificationWorker: NotificationWorker;
-  private telegramApiWorker: TelegramApiWorker;
-  private analyticsWorker: AnalyticsWorker;
-  private cleanupWorker: CleanupWorker;
+  private notificationWorker!: NotificationWorker;
+  private telegramApiWorker!: TelegramApiWorker;
+  private analyticsWorker!: AnalyticsWorker;
+  private cleanupWorker!: CleanupWorker;
   private workers: Worker[] = [];
 
   constructor(bot: Bot) {

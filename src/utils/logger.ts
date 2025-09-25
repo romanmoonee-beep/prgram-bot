@@ -1,6 +1,7 @@
 // src/utils/logger.ts
 import fs from 'fs';
 import path from 'path';
+import { Op } from 'sequelize';
 
 // Создаем директорию для логов если её нет
 const logsDir = path.join(process.cwd(), 'logs');
@@ -489,7 +490,7 @@ class Logger {
           ],
           where: {
             createdAt: {
-              [UserAction.sequelize!.Op.gte]: startDate
+              [Op.gte]: startDate
             }
           },
           group: ['action'],
@@ -506,8 +507,4 @@ class Logger {
 
 // Экспортируем singleton
 export const logger = new Logger();
-<<<<<<< HEAD
 export default logger;
-=======
-export default logger;
->>>>>>> 9cc5691 (5-commit)

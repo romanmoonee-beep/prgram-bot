@@ -1,7 +1,7 @@
 // src/types/task.types.ts
 
 import { TASK_TYPES, TASK_STATUSES, EXECUTION_STATUSES } from '../utils/constants';
-import { UserLevel } from './user.types';
+import { UserLevel } from '../services/user/types';
 
 // Основные типы
 export type TaskType = keyof typeof TASK_TYPES;
@@ -414,14 +414,3 @@ export interface TaskEvent {
   triggeredById?: number;
   timestamp: Date;
 }
-
-export default {
-  CreateTaskData,
-  TaskDetails,
-  TaskSummary,
-  TaskExecution,
-  TaskFilter,
-  TaskStats,
-  TaskAnalytics,
-  TaskReport
-};

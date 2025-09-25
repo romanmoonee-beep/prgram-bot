@@ -4,18 +4,18 @@ import { Bot } from 'grammy';
 import { notificationQueue, NotificationJob } from '../queues';
 import { User, Notification } from '../../database/models';
 import { logger } from '../../utils/logger';
-import { formatNotification } from '../../utils/formatters';
+import { formatNotification } from '../../utils/formatters/init';
 
 // Worker для отправки уведомлений
 class NotificationWorker {
-  private bot: Bot;
+  public bot: Bot;
 
   constructor(bot: Bot) {
     this.bot = bot;
     this.setupProcessor();
   }
 
-  private setupProcessor() {
+  public setupProcessor() {
     // Настраиваем обработчик очереди с приоритетами
     notificationQueue.process('send-notification', 10, this.processNotification.bind(this));
     
@@ -74,7 +74,7 @@ class NotificationWorker {
     }
   }
 
-  private async sendTelegramNotification(telegramId: number, message: string, data?: any): Promise<boolean> {
+  public async sendTelegramNotification(telegramId: number, message: string, data?: any): Promise<boolean> {
     try {
       const options: any = {
         parse_mode: 'Markdown',
@@ -104,7 +104,7 @@ class NotificationWorker {
     }
   }
 
-  private shouldSendNotification(user: User, type: string): boolean {
+  public shouldSendNotification(user: User, type: string): boolean {
     const settings = user.notificationSettings as any;
     
     if (!settings || typeof settings !== 'object') {

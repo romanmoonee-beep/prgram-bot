@@ -350,10 +350,6 @@ User.init(
   }
 );
 
-<<<<<<< HEAD
-=======
-// Ассоциации для реферальной системы
->>>>>>> 9cc5691 (5-commit)
 User.belongsTo(User, {
   as: 'referrer',
   foreignKey: 'referrerId'
@@ -364,8 +360,3 @@ User.hasMany(User, {
   foreignKey: 'referrerId'
 });
 
-<<<<<<< HEAD
-export { User };
-=======
-export { User };
->>>>>>> 9cc5691 (5-commit)

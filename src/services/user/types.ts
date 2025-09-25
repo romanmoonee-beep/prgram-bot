@@ -139,6 +139,7 @@ export interface UserProfile {
     category: string;
     rarity: 'common' | 'rare' | 'epic' | 'legendary';
   }>;
+}
 // src/services/user/types.ts
 
 // Основные интерфейсы для работы с пользователями

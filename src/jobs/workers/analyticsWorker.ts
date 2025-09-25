@@ -3,24 +3,24 @@ import { Job } from 'bull';
 import { analyticsQueue, AnalyticsJob } from '../queues';
 import { User, Task, TaskExecution, Transaction } from '../../database/models';
 import { logger } from '../../utils/logger';
-import { redis } from '../queues/index';
+import { redis } from '../../bot/middlewares/rateLimit';
 
 // Worker для обработки аналитических данных
 class AnalyticsWorker {
-  private statsCache = new Map<string, any>();
+  public statsCache = new Map<string, any>();
 
   constructor() {
     this.setupProcessor();
   }
 
-  private setupProcessor() {
+  public setupProcessor() {
     // Настраиваем обработчик очереди
     analyticsQueue.process('process-analytics', 5, this.processAnalytics.bind(this));
     
     logger.info('✅ Analytics worker initialized');
   }
 
-  private async processAnalytics(job: Job<AnalyticsJob>) {
+  public async processAnalytics(job: Job<AnalyticsJob>) {
     const { type, data, userId } = job.data;
     
     try {
@@ -43,7 +43,7 @@ class AnalyticsWorker {
     }
   }
 
-  private async processUserAction(data: any, userId?: number) {
+  public async processUserAction(data: any, userId?: number) {
     const { action, metadata = {} } = data;
     
     // Обновляем счетчики действий пользователей в Redis
@@ -62,7 +62,7 @@ class AnalyticsWorker {
     return { success: true, action, userId };
   }
 
-  private async processTaskStats(data: any) {
+  public async processTaskStats(data: any) {
     const { taskId, event, value = 1 } = data;
     
     if (!taskId || !event) {
@@ -85,7 +85,7 @@ class AnalyticsWorker {
     return { success: true, taskId, event, value };
   }
 
-  private async processSystemStats() {
+  public async processSystemStats() {
     try {
       // Собираем системную статистику
       const stats = await this.collectSystemStats();
@@ -110,7 +110,7 @@ class AnalyticsWorker {
     }
   }
 
-  private async collectSystemStats() {
+  public async collectSystemStats() {
     const [
       totalUsers,
       activeUsers,

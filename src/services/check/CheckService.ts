@@ -2,7 +2,7 @@
 import { Transaction, Op } from 'sequelize';
 import { Check, CheckActivation, User } from '../../database/models';
 import { UserService } from '../user';
-import { TransactionService } from '../transaction';
+import { TransactionService } from '../transactions';
 import { NotificationService } from '../notification';
 import { TelegramService } from '../telegram';
 import { 
@@ -15,7 +15,7 @@ import {
 } from './types';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { generateCheckCode, validatePassword, hashPassword } from '../../utils/helpers';
+import { generateCheckCode, validatePassword, hashPassword } from '../../utils/helpers/init';
 
 export class CheckService {
   constructor(

@@ -3,7 +3,7 @@ import { Job } from 'bull';
 import { taskCheckQueue, TaskCheckJob } from '../queues';
 import { TaskExecution, Task, User } from '../../database/models';
 import { logger } from '../../utils/logger';
-import { telegramService } from '../../services/telegram';
+import { getTelegramService } from '../../services/telegram';
 import { EXECUTION_STATUSES } from '../../utils/constants';
 
 // Worker для проверки выполнения заданий
@@ -12,14 +12,14 @@ class TaskCheckWorker {
     this.setupProcessor();
   }
 
-  private setupProcessor() {
+  public setupProcessor() {
     // Настраиваем обработчик очереди
     taskCheckQueue.process('check-task-execution', 5, this.processTaskCheck.bind(this));
     
     logger.info('✅ Task check worker initialized');
   }
 
-  private async processTaskCheck(job: Job<TaskCheckJob>) {
+  public async processTaskCheck(job: Job<TaskCheckJob>) {
     const { taskExecutionId, userId, taskId, checkType, targetUrl } = job.data;
     
     try {
@@ -101,7 +101,7 @@ class TaskCheckWorker {
     }
   }
 
-  private async performCheck(checkType: string, userId: number, targetUrl: string) {
+  public async performCheck(checkType: string, userId: number, targetUrl: string) {
     try {
       switch (checkType) {
         case 'subscription':
@@ -121,7 +121,7 @@ class TaskCheckWorker {
     }
   }
 
-  private async checkSubscription(userId: number, channelUrl: string) {
+  public async checkSubscription(userId: number, channelUrl: string) {
     try {
       // Извлекаем username из URL
       const username = this.extractUsername(channelUrl);
@@ -130,7 +130,7 @@ class TaskCheckWorker {
       }
 
       // Проверяем подписку через Telegram API
-      const isSubscribed = await telegramService.checkUserSubscription(userId, username);
+      const isSubscribed = await getTelegramService().checkUserSubscription(userId, username);
       
       return {
         success: isSubscribed,
@@ -141,7 +141,7 @@ class TaskCheckWorker {
     }
   }
 
-  private async checkMembership(userId: number, groupUrl: string) {
+  public async checkMembership(userId: number, groupUrl: string) {
     try {
       // Извлекаем username из URL
       const username = this.extractUsername(groupUrl);
@@ -150,7 +150,7 @@ class TaskCheckWorker {
       }
 
       // Проверяем членство в группе через Telegram API
-      const isMember = await telegramService.checkUserMembership(userId, username);
+      const isMember = await getTelegramService().checkUserMembership(userId, username);
       
       return {
         success: isMember,
@@ -161,7 +161,7 @@ class TaskCheckWorker {
     }
   }
 
-  private async checkReaction(userId: number, postUrl: string) {
+  public async checkReaction(userId: number, postUrl: string) {
     try {
       // Для проверки реакций нужны более сложные методы
       // Пока что считаем, что пользователь поставил реакцию
@@ -179,7 +179,7 @@ class TaskCheckWorker {
     }
   }
 
-  private async checkView(userId: number, postUrl: string) {
+  public async checkView(userId: number, postUrl: string) {
     try {
       // Для проверки просмотров также нужны специальные методы
       // Пока что считаем задание выполненным
@@ -196,7 +196,7 @@ class TaskCheckWorker {
     }
   }
 
-  private extractUsername(url: string): string | null {
+  public extractUsername(url: string): string | null {
     const match = url.match(/t\.me\/([a-zA-Z0-9_]+)/);
     return match ? match[1] : null;
   }

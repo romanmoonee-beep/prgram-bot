@@ -1,13 +1,11 @@
 // src/jobs/queues/index.ts
 import Queue from 'bull';
+import { Op } from 'sequelize';
 import { logger } from '../../utils/logger';
 import { config } from '../../config';
 import { TaskExecution, User, Task } from '../../database/models';
-<<<<<<< HEAD
-import { telegramService } from '../../services/telegram';
-=======
-import { telegramService } from '../../services/telegram/TelegramService';
->>>>>>> 9cc5691 (5-commit)
+import { TelegramService, CreateTelegramInstance } from '../../services/telegram/TelegramService';
+import { redis } from '../../bot/middlewares/rateLimit';
 
 // Создание очередей
 const taskCheckQueue = new Queue('task check', config.redis.url);
@@ -27,7 +25,7 @@ export class QueueManager {
     return await taskCheckQueue.add('check-task-execution', data, {
       delay,
       attempts: 3,
-      backoff: 'exponential'
+      backoff: { type: 'exponential' }
     });
   }
 
@@ -40,7 +38,7 @@ export class QueueManager {
     return await notificationQueue.add('send-notification', data, {
       delay,
       attempts: 2,
-      backoff: 'fixed'
+      backoff: { type: 'fixed' }
     });
   }
 
@@ -85,8 +83,9 @@ export class QueueManager {
           logger.warn(`Task execution ${taskExecutionId} cannot be auto-checked`);
           return { success: false, reason: 'Cannot be auto-checked' };
         }
+        
+        const telegramService = CreateTelegramInstance()
 
-        // Увеличиваем счетчик попыток
         await execution.incrementAutoCheckAttempts();
 
         let checkResult = false;
@@ -95,25 +94,55 @@ export class QueueManager {
         // Выполняем проверку в зависимости от типа
         switch (checkType) {
           case 'subscription':
-            checkResult = await telegramService.checkUserSubscription(userId, targetUrl);
-            resultDetails = { type: 'subscription', targetUrl };
+            const subscriptionResult = await telegramService.checkSubscription(userId, targetUrl);
+            checkResult = subscriptionResult.isSubscribed;
+            resultDetails = {
+              type: 'subscription',
+              targetUrl,
+              isSubscribed: subscriptionResult.isSubscribed,
+              status: subscriptionResult.status,
+              channelInfo: subscriptionResult.channelInfo,
+              error: subscriptionResult.error
+            };
             break;
-            
+
           case 'membership':
-            checkResult = await telegramService.checkUserMembership(userId, targetUrl);
-            resultDetails = { type: 'membership', targetUrl };
+            const membershipResult = await telegramService.checkGroupMembership(userId, targetUrl);
+            checkResult = membershipResult.isSubscribed;
+            resultDetails = {
+              type: 'membership',
+              targetUrl,
+              isMember: membershipResult.isSubscribed,
+              status: membershipResult.status,
+              groupInfo: membershipResult.channelInfo,
+              error: membershipResult.error
+            };
             break;
-            
+
           case 'reaction':
-            checkResult = await telegramService.checkUserReaction(userId, targetUrl);
-            resultDetails = { type: 'reaction', targetUrl };
+            const reactionResult = await telegramService.checkReaction(userId, targetUrl);
+            checkResult = reactionResult.hasReaction;
+            resultDetails = {
+              type: 'reaction',
+              targetUrl,
+              hasReaction: reactionResult.hasReaction,
+              reactionType: reactionResult.reactionType,
+              messageInfo: reactionResult.messageInfo,
+              error: reactionResult.error
+            };
             break;
-            
+
           case 'view':
-            // Для просмотров считаем что задание выполнено (проверить реально нельзя)
             checkResult = true;
-            resultDetails = { type: 'view', assumed: true };
+            resultDetails = {
+              type: 'view',
+              targetUrl,
+              assumed: true
+            };
             break;
+
+          default:
+            throw new Error(`Неподдерживаемый тип проверки: ${checkType}`);
         }
 
         // Сохраняем результат проверки
@@ -263,7 +292,7 @@ export class QueueManager {
 
   private static setupErrorHandlers() {
     // Обработка ошибок для всех очередей
-    [taskCheckQueue, notificationQueue, cleanupQueue].forEach(queue => {
+    [taskCheckQueue, notificationQueue, cleanupQueue, analyticsQueue, telegramApiQueue].forEach(queue => {
       queue.on('error', (error) => {
         logger.error(`Queue ${queue.name} error:`, error);
       });
@@ -283,7 +312,9 @@ export class QueueManager {
       await Promise.all([
         taskCheckQueue.close(),
         notificationQueue.close(),
-        cleanupQueue.close()
+        cleanupQueue.close(),
+        analyticsQueue.close(),
+        telegramApiQueue.close()
       ]);
       logger.info('Queues shut down successfully');
     });
@@ -314,10 +345,44 @@ export class QueueManager {
   }
 }
 
+export interface TaskCheckJob {
+  taskExecutionId: number;
+  userId: number;
+  taskId: number;
+  checkType: 'subscription' | 'membership' | 'reaction' | 'view';
+  targetUrl: string;
+}
+
+export interface NotificationJob {
+  userId: number;
+  type: string;
+  title: string;
+  message: string;
+  data?: any;
+  priority?: number;
+}
+
+export interface CleanupJob {
+  type: 'old_data' | 'temp_files' | 'expired_sessions';
+  olderThan?: Date;
+}
+
+export interface AnalyticsJob {
+  type: 'user_action' | 'task_stats' | 'system_stats';
+  data: any;
+  userId?: number;
+}
+
+export interface TelegramApiJob {
+  action: 'send_message' | 'check_subscription' | 'get_chat_member' | 'get_chat';
+  data: any;
+  userId?: number;
+  chatId?: number;
+}
+
+const analyticsQueue = new Queue('analytics', config.redis.url); 
+const telegramApiQueue = new Queue('telegram-api', config.redis.url);
+
 // Экспорт для использования в других частях приложения
-export { taskCheckQueue, notificationQueue, cleanupQueue };
-<<<<<<< HEAD
+export { taskCheckQueue, notificationQueue, cleanupQueue, analyticsQueue, telegramApiQueue };
 export default QueueManager;
-=======
-export default QueueManager;
->>>>>>> 9cc5691 (5-commit)

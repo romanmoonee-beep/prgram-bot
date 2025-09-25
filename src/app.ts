@@ -122,12 +122,11 @@ async function startBot() {
       await bot.api.setWebhook(webhookUrl, {
         drop_pending_updates: true,
         allowed_updates: [
-          'message',
-          'callback_query',
-          'inline_query',
-          'chosen_inline_result',
-          'pre_checkout_query',
-          'successful_payment'
+          "message",
+          "callback_query",
+          "inline_query",
+          "chosen_inline_result",
+          "pre_checkout_query"
         ]
       });
       
@@ -149,12 +148,11 @@ async function startBot() {
       await bot.start({
         drop_pending_updates: true,
         allowed_updates: [
-          'message',
-          'callback_query',
-          'inline_query',
-          'chosen_inline_result',
-          'pre_checkout_query',
-          'successful_payment'
+          "message",
+          "callback_query",
+          "inline_query",
+          "chosen_inline_result",
+          "pre_checkout_query"
         ]
       });
 
@@ -182,7 +180,7 @@ async function startBot() {
         try {
           await bot.api.sendMessage(adminId, startMessage, { parse_mode: 'Markdown' });
         } catch (error) {
-          logger.warn(`Failed to notify admin ${adminId}:`, error.message);
+          logger.warn(`Failed to notify admin ${adminId}:`, error);
         }
       }
     }

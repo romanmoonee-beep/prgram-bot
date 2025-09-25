@@ -11,6 +11,7 @@ import {
 } from 'sequelize';
 import { sequelize } from '../config/database';
 import { User } from './User';
+import { Op } from 'sequelize';
 
 export interface UserActionAttributes extends Model<InferAttributes<UserAction>, InferCreationAttributes<UserAction>> {
   id: CreationOptional<number>;
@@ -84,7 +85,7 @@ export class UserAction extends Model<InferAttributes<UserAction>, InferCreation
       where: {
         action,
         createdAt: {
-          [DataTypes.Op.gte]: startDate
+          [Op.gte]: startDate
         }
       },
       group: ['action'],
@@ -100,7 +101,7 @@ export class UserAction extends Model<InferAttributes<UserAction>, InferCreation
       where: {
         success: false,
         createdAt: {
-          [DataTypes.Op.gte]: startDate
+          [Op.gte]: startDate
         }
       },
       order: [['createdAt', 'DESC']],
@@ -121,7 +122,7 @@ export class UserAction extends Model<InferAttributes<UserAction>, InferCreation
       where: {
         userId,
         createdAt: {
-          [DataTypes.Op.gte]: startDate
+          [Op.gte]: startDate
         }
       },
       group: ['action'],
@@ -244,8 +245,4 @@ User.hasMany(UserAction, {
   as: 'actions'
 });
 
-<<<<<<< HEAD
 export default UserAction;
-=======
-export default UserAction;
->>>>>>> 9cc5691 (5-commit)

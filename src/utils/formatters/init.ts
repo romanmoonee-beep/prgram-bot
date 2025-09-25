@@ -100,8 +100,30 @@ export function formatTimeRemaining(endDate: Date): string {
   } else if (hours > 0) {
     return `${hours}ч ${minutes}м`;
   } else {
-<<<<<<< HEAD
     return `${minutes}м`;
-=======
-    return `${minutes}м`;
->>>>>>> 9cc5691 (5-commit)
+  }
+}
+
+export function formatNotification(
+  type: string,
+  title: string,
+  message: string,
+  data?: any
+): string {
+  switch (type) {
+    case 'task_completed':
+      return `✅ *${title}*\n${message}\nНаграда: ${data?.reward ?? ''} GRAM`;
+    case 'referral_joined':
+      return `👥 *${title}*\n${message}\nБонус: ${data?.bonus ?? ''} GRAM`;
+    case 'balance_low':
+      return `⚠️ *${title}*\n${message}`;
+    case 'level_up':
+      return `🏆 *${title}*\n${message}`;
+    case 'check_received':
+      return `💸 *${title}*\n${message}\nКод чека: \`${data?.checkCode ?? ''}\``;
+    case 'system':
+      return `📢 *${title}*\n${message}`;
+    default:
+      return `📩 *${title}*\n${message}`;
+  }
+}

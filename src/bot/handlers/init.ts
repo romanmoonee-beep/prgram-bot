@@ -6,7 +6,7 @@ import { logger } from '../../utils/logger';
 import { setupStartHandler } from './start';
 import { setupCabinetHandlers } from './cabinet';
 import { setupEarnHandlers } from './earn';
-import { setupTaskExecutionHandlers } from './taskExecution';
+import { setupTaskExecutionHandlers } from './TaskExecution';
 import { setupAdvertiseHandlers, setupTaskCreationTextHandlers, setupTaskCreationFinalHandlers } from './advertise';
 import { setupChecksHandlers, setupCheckTextHandlers, setupCheckCreationConfirmHandlers } from './checks';
 import { setupReferralsHandlers } from './referrals';

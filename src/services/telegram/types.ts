@@ -1,6 +1,6 @@
 // src/services/telegram/types.ts
 
-// Основные интерфейсы для Telegram API
+// ========== Пользователи ==========
 export interface TelegramUser {
   id: number;
   isBot: boolean;
@@ -15,6 +15,7 @@ export interface TelegramUser {
   supportsInlineQueries?: boolean;
 }
 
+// ========== Чаты и участники ==========
 export interface ChatMember {
   status: 'creator' | 'administrator' | 'member' | 'restricted' | 'left' | 'kicked';
   user: TelegramUser;
@@ -46,7 +47,7 @@ export interface ChatMember {
 }
 
 export interface ChatInfo {
-  id: string;
+  id: string | number;
   title: string;
   type: 'private' | 'group' | 'supergroup' | 'channel';
   memberCount?: number;
@@ -80,17 +81,18 @@ export interface ChatPermissions {
   canManageTopics?: boolean;
 }
 
+// ========== Сообщения ==========
 export interface MessageInfo {
   messageId: number;
   chatId: string | number;
-  date: Date;
+  date: number; // Telegram всегда возвращает UNIX time (seconds)
   text?: string;
   caption?: string;
   from?: TelegramUser;
   replyToMessage?: MessageInfo;
   forwardFrom?: TelegramUser;
   forwardFromChat?: ChatInfo;
-  editDate?: Date;
+  editDate?: number;
   mediaGroupId?: string;
   hasProtectedContent?: boolean;
   reactions?: MessageReaction[];
@@ -102,59 +104,72 @@ export interface MessageReaction {
   users?: TelegramUser[];
 }
 
-// Результаты проверок
-export interface SubscriptionCheckResult {
-  isSubscribed: boolean;
-  status: ChatMember['status'];
-  joinedAt?: Date | null;
-  error?: string;
-  channelInfo?: {
-    id: string;
-    title: string;
-    type: 'channel' | 'group';
-    memberCount?: number;
-    username?: string;
-  };
-}
-
-export interface BotAddResult {
-  isAdded: boolean;
-  botStatus: ChatMember['status'];
-  permissions: boolean;
-  error?: string;
-  chatInfo?: ChatInfo;
-  addedAt?: Date;
-}
-
-export interface ReactionCheckResult {
-  hasReaction: boolean;
-  reactionType?: string | null;
-  error?: string;
-  messageInfo?: {
-    chatId: string | number;
-    messageId: number;
-    reactions: Array<{
-      emoji: string;
-      count: number;
-    }>;
-  };
-}
-
-// Операции с сообщениями
-export interface SendMessageOptions {
-  parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
+export interface Message extends MessageInfo {
+  chat: ChatInfo;
+  senderChat?: ChatInfo;
+  forwardFromMessageId?: number;
+  forwardSignature?: string;
+  forwardSenderName?: string;
+  forwardDate?: number;
+  isTopicMessage?: boolean;
+  isAutomaticForward?: boolean;
+  viaBot?: TelegramUser;
+  authorSignature?: string;
   entities?: MessageEntity[];
-  disableWebPagePreview?: boolean;
-  disableNotification?: boolean;
-  protectContent?: boolean;
-  replyToMessageId?: number;
-  allowSendingWithoutReply?: boolean;
-  replyMarkup?: InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply;
+  animation?: Animation;
+  audio?: Audio;
+  document?: Document;
+  photo?: PhotoSize[];
+  sticker?: Sticker;
+  video?: Video;
+  videoNote?: VideoNote;
+  voice?: Voice;
+  captionEntities?: MessageEntity[];
+  hasMediaSpoiler?: boolean;
+  contact?: Contact;
+  dice?: Dice;
+  game?: Game;
+  poll?: Poll;
+  venue?: Venue;
+  location?: Location;
+  newChatMembers?: TelegramUser[];
+  leftChatMember?: TelegramUser;
+  newChatTitle?: string;
+  newChatPhoto?: PhotoSize[];
+  deleteChatPhoto?: boolean;
+  groupChatCreated?: boolean;
+  supergroupChatCreated?: boolean;
+  channelChatCreated?: boolean;
+  messageAutoDeleteTimerChanged?: any;
+  migrateToChatId?: number;
+  migrateFromChatId?: number;
+  pinnedMessage?: Message;
+  invoice?: any;
+  successfulPayment?: any;
+  userShared?: any;
+  chatShared?: any;
+  connectedWebsite?: string;
+  writeAccessAllowed?: any;
+  passportData?: any;
+  proximityAlertTriggered?: any;
+  forumTopicCreated?: any;
+  forumTopicEdited?: any;
+  forumTopicClosed?: any;
+  forumTopicReopened?: any;
+  generalForumTopicHidden?: any;
+  generalForumTopicUnhidden?: any;
+  videoChatScheduled?: any;
+  videoChatStarted?: any;
+  videoChatEnded?: any;
+  videoChatParticipantsInvited?: any;
+  webAppData?: any;
+  replyMarkup?: InlineKeyboardMarkup;
 }
 
+// ========== Сущности сообщений ==========
 export interface MessageEntity {
-  type: 'mention' | 'hashtag' | 'cashtag' | 'bot_command' | 'url' | 'email' | 'phone_number' | 
-        'bold' | 'italic' | 'underline' | 'strikethrough' | 'spoiler' | 'code' | 'pre' | 
+  type: 'mention' | 'hashtag' | 'cashtag' | 'bot_command' | 'url' | 'email' | 'phone_number' |
+        'bold' | 'italic' | 'underline' | 'strikethrough' | 'spoiler' | 'code' | 'pre' |
         'text_link' | 'text_mention' | 'custom_emoji';
   offset: number;
   length: number;
@@ -164,7 +179,7 @@ export interface MessageEntity {
   customEmojiId?: string;
 }
 
-// Клавиатуры
+// ========== Клавиатуры ==========
 export interface InlineKeyboardMarkup {
   inline_keyboard: InlineKeyboardButton[][];
 }
@@ -211,305 +226,7 @@ export interface ForceReply {
   selective?: boolean;
 }
 
-// Дополнительные типы
-export interface WebApp {
-  url: string;
-}
-
-export interface LoginUrl {
-  url: string;
-  forwardText?: string;
-  botUsername?: string;
-  requestWriteAccess?: boolean;
-}
-
-export interface KeyboardButtonRequestUser {
-  requestId: number;
-  userIsBot?: boolean;
-  userIsPremium?: boolean;
-}
-
-export interface KeyboardButtonRequestChat {
-  requestId: number;
-  chatIsChannel: boolean;
-  chatIsForum?: boolean;
-  chatHasUsername?: boolean;
-  chatIsCreated?: boolean;
-  userAdministratorRights?: ChatAdministratorRights;
-  botAdministratorRights?: ChatAdministratorRights;
-  botIsMember?: boolean;
-}
-
-export interface ChatAdministratorRights {
-  isAnonymous: boolean;
-  canManageChat: boolean;
-  canDeleteMessages: boolean;
-  canManageVideoChats: boolean;
-  canRestrictMembers: boolean;
-  canPromoteMembers: boolean;
-  canChangeInfo: boolean;
-// src/services/telegram/types.ts
-
-// Основные интерфейсы для Telegram API
-export interface TelegramUser {
-  id: number;
-  isBot: boolean;
-  firstName: string;
-  lastName?: string;
-  username?: string;
-  languageCode?: string;
-  isPremium?: boolean;
-  addedToAttachmentMenu?: boolean;
-  canJoinGroups?: boolean;
-  canReadAllGroupMessages?: boolean;
-  supportsInlineQueries?: boolean;
-}
-
-export interface ChatMember {
-  status: 'creator' | 'administrator' | 'member' | 'restricted' | 'left' | 'kicked';
-  user: TelegramUser;
-  isAnonymous?: boolean;
-  customTitle?: string;
-  canBeEdited?: boolean;
-  canManageChat?: boolean;
-  canDeleteMessages?: boolean;
-  canManageVideoChats?: boolean;
-  canRestrictMembers?: boolean;
-  canPromoteMembers?: boolean;
-  canChangeInfo?: boolean;
-  canInviteUsers?: boolean;
-  canPostMessages?: boolean;
-  canEditMessages?: boolean;
-  canPinMessages?: boolean;
-  canManageTopics?: boolean;
-  untilDate?: number;
-  canSendMessages?: boolean;
-  canSendAudios?: boolean;
-  canSendDocuments?: boolean;
-  canSendPhotos?: boolean;
-  canSendVideos?: boolean;
-  canSendVideoNotes?: boolean;
-  canSendVoiceNotes?: boolean;
-  canSendPolls?: boolean;
-  canSendOtherMessages?: boolean;
-  canAddWebPagePreviews?: boolean;
-}
-
-export interface ChatInfo {
-  id: string;
-  title: string;
-  type: 'private' | 'group' | 'supergroup' | 'channel';
-  memberCount?: number;
-  description?: string;
-  username?: string;
-  inviteLink?: string;
-  photo?: {
-    smallFileId: string;
-    smallFileUniqueId: string;
-    bigFileId: string;
-    bigFileUniqueId: string;
-  };
-  pinnedMessage?: MessageInfo;
-  permissions?: ChatPermissions;
-}
-
-export interface ChatPermissions {
-  canSendMessages?: boolean;
-  canSendAudios?: boolean;
-  canSendDocuments?: boolean;
-  canSendPhotos?: boolean;
-  canSendVideos?: boolean;
-  canSendVideoNotes?: boolean;
-  canSendVoiceNotes?: boolean;
-  canSendPolls?: boolean;
-  canSendOtherMessages?: boolean;
-  canAddWebPagePreviews?: boolean;
-  canChangeInfo?: boolean;
-  canInviteUsers?: boolean;
-  canPinMessages?: boolean;
-  canManageTopics?: boolean;
-}
-
-export interface MessageInfo {
-  messageId: number;
-  chatId: string | number;
-  date: Date;
-  text?: string;
-  caption?: string;
-  from?: TelegramUser;
-  replyToMessage?: MessageInfo;
-  forwardFrom?: TelegramUser;
-  forwardFromChat?: ChatInfo;
-  editDate?: Date;
-  mediaGroupId?: string;
-  hasProtectedContent?: boolean;
-  reactions?: MessageReaction[];
-}
-
-export interface MessageReaction {
-  emoji: string;
-  count: number;
-  users?: TelegramUser[];
-}
-
-// Результаты проверок
-export interface SubscriptionCheckResult {
-  isSubscribed: boolean;
-  status: ChatMember['status'];
-  joinedAt?: Date | null;
-  error?: string;
-  channelInfo?: {
-    id: string;
-    title: string;
-    type: 'channel' | 'group';
-    memberCount?: number;
-    username?: string;
-  };
-}
-
-export interface BotAddResult {
-  isAdded: boolean;
-  botStatus: ChatMember['status'];
-  permissions: boolean;
-  error?: string;
-  chatInfo?: ChatInfo;
-  addedAt?: Date;
-}
-
-export interface ReactionCheckResult {
-  hasReaction: boolean;
-  reactionType?: string | null;
-  error?: string;
-  messageInfo?: {
-    chatId: string | number;
-    messageId: number;
-    reactions: Array<{
-      emoji: string;
-      count: number;
-    }>;
-  };
-}
-
-// Операции с сообщениями
-export interface SendMessageOptions {
-  parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
-  entities?: MessageEntity[];
-  disableWebPagePreview?: boolean;
-  disableNotification?: boolean;
-  protectContent?: boolean;
-  replyToMessageId?: number;
-  allowSendingWithoutReply?: boolean;
-  replyMarkup?: InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply;
-}
-
-export interface MessageEntity {
-  type: 'mention' | 'hashtag' | 'cashtag' | 'bot_command' | 'url' | 'email' | 'phone_number' | 
-        'bold' | 'italic' | 'underline' | 'strikethrough' | 'spoiler' | 'code' | 'pre' | 
-        'text_link' | 'text_mention' | 'custom_emoji';
-  offset: number;
-  length: number;
-  url?: string;
-  user?: TelegramUser;
-  language?: string;
-  customEmojiId?: string;
-}
-
-// Клавиатуры
-export interface InlineKeyboardMarkup {
-  inline_keyboard: InlineKeyboardButton[][];
-}
-
-export interface InlineKeyboardButton {
-  text: string;
-  url?: string;
-  callbackData?: string;
-  webApp?: WebApp;
-  loginUrl?: LoginUrl;
-  switchInlineQuery?: string;
-  switchInlineQueryCurrentChat?: string;
-  callbackGame?: any;
-  pay?: boolean;
-}
-
-export interface ReplyKeyboardMarkup {
-  keyboard: KeyboardButton[][];
-  isPersistent?: boolean;
-  resizeKeyboard?: boolean;
-  oneTimeKeyboard?: boolean;
-  inputFieldPlaceholder?: string;
-  selective?: boolean;
-}
-
-export interface KeyboardButton {
-  text: string;
-  requestUser?: KeyboardButtonRequestUser;
-  requestChat?: KeyboardButtonRequestChat;
-  requestContact?: boolean;
-  requestLocation?: boolean;
-  requestPoll?: KeyboardButtonPollType;
-  webApp?: WebApp;
-}
-
-export interface ReplyKeyboardRemove {
-  removeKeyboard: true;
-  selective?: boolean;
-}
-
-export interface ForceReply {
-  forceReply: true;
-  inputFieldPlaceholder?: string;
-  selective?: boolean;
-}
-
-// Дополнительные типы
-export interface WebApp {
-  url: string;
-}
-
-export interface LoginUrl {
-  url: string;
-  forwardText?: string;
-  botUsername?: string;
-  requestWriteAccess?: boolean;
-}
-
-export interface KeyboardButtonRequestUser {
-  requestId: number;
-  userIsBot?: boolean;
-  userIsPremium?: boolean;
-}
-
-export interface KeyboardButtonRequestChat {
-  requestId: number;
-  chatIsChannel: boolean;
-  chatIsForum?: boolean;
-  chatHasUsername?: boolean;
-  chatIsCreated?: boolean;
-  userAdministratorRights?: ChatAdministratorRights;
-  botAdministratorRights?: ChatAdministratorRights;
-  botIsMember?: boolean;
-}
-
-export interface ChatAdministratorRights {
-  isAnonymous: boolean;
-  canManageChat: boolean;
-  canDeleteMessages: boolean;
-  canManageVideoChats: boolean;
-  canRestrictMembers: boolean;
-  canPromoteMembers: boolean;
-  canChangeInfo: boolean;
-  canInviteUsers: boolean;
-  canPostMessages?: boolean;
-  canEditMessages?: boolean;
-  canPinMessages?: boolean;
-  canManageTopics?: boolean;
-}
-
-export interface KeyboardButtonPollType {
-  type?: 'quiz' | 'regular';
-}
-
-// Файлы и медиа
+// ========== Файлы и медиа ==========
 export interface FileInfo {
   fileId: string;
   fileUniqueId: string;
@@ -557,6 +274,22 @@ export interface VideoNote extends FileInfo {
   thumbnail?: PhotoSize;
 }
 
+export interface Sticker extends FileInfo {
+  emoji?: string;
+  setName?: string;
+  isAnimated?: boolean;
+  isVideo?: boolean;
+}
+
+export interface Animation extends FileInfo {
+  width: number;
+  height: number;
+  duration: number;
+  fileName?: string;
+  mimeType?: string;
+  thumbnail?: PhotoSize;
+}
+
 export interface Contact {
   phoneNumber: string;
   firstName: string;
@@ -584,153 +317,21 @@ export interface Venue {
   googlePlaceType?: string;
 }
 
-// Webhook и обновления
-export interface WebhookInfo {
-  url: string;
-  hasCustomCertificate: boolean;
-  pendingUpdateCount: number;
-  ipAddress?: string;
-  lastErrorDate?: number;
-  lastErrorMessage?: string;
-  lastSynchronizationErrorDate?: number;
-  maxConnections?: number;
-  allowedUpdates?: string[];
+export interface Dice {
+  emoji: string;
+  value: number;
 }
 
-export interface Update {
-  updateId: number;
-  message?: Message;
-  editedMessage?: Message;
-  channelPost?: Message;
-  editedChannelPost?: Message;
-  inlineQuery?: InlineQuery;
-  chosenInlineResult?: ChosenInlineResult;
-  callbackQuery?: CallbackQuery;
-  shippingQuery?: ShippingQuery;
-  preCheckoutQuery?: PreCheckoutQuery;
-  poll?: Poll;
-  pollAnswer?: PollAnswer;
-  myChatMember?: ChatMemberUpdated;
-  chatMember?: ChatMemberUpdated;
-  chatJoinRequest?: ChatJoinRequest;
-}
-
-export interface Message extends MessageInfo {
-  from?: TelegramUser;
-  senderChat?: ChatInfo;
-  date: number;
-  chat: ChatInfo;
-  forwardFrom?: TelegramUser;
-  forwardFromChat?: ChatInfo;
-  forwardFromMessageId?: number;
-  forwardSignature?: string;
-  forwardSenderName?: string;
-  forwardDate?: number;
-  isTopicMessage?: boolean;
-  isAutomaticForward?: boolean;
-  replyToMessage?: Message;
-  viaBot?: TelegramUser;
-  editDate?: number;
-  hasProtectedContent?: boolean;
-  mediaGroupId?: string;
-  authorSignature?: string;
+export interface Game {
+  title: string;
+  description: string;
+  photo: PhotoSize[];
   text?: string;
-  entities?: MessageEntity[];
-  animation?: any;
-  audio?: Audio;
-  document?: Document;
-  photo?: PhotoSize[];
-  sticker?: any;
-  video?: Video;
-  videoNote?: VideoNote;
-  voice?: Voice;
-  caption?: string;
-  captionEntities?: MessageEntity[];
-  hasMediaSpoiler?: boolean;
-  contact?: Contact;
-  dice?: any;
-  game?: any;
-  poll?: Poll;
-  venue?: Venue;
-  location?: Location;
-  newChatMembers?: TelegramUser[];
-  leftChatMember?: TelegramUser;
-  newChatTitle?: string;
-  newChatPhoto?: PhotoSize[];
-  deleteChatPhoto?: boolean;
-  groupChatCreated?: boolean;
-  supergroupChatCreated?: boolean;
-  channelChatCreated?: boolean;
-  messageAutoDeleteTimerChanged?: any;
-  migrateToChatId?: number;
-  migrateFromChatId?: number;
-  pinnedMessage?: Message;
-  invoice?: any;
-  successfulPayment?: any;
-  userShared?: any;
-  chatShared?: any;
-  connectedWebsite?: string;
-  writeAccessAllowed?: any;
-  passportData?: any;
-  proximityAlertTriggered?: any;
-  forumTopicCreated?: any;
-  forumTopicEdited?: any;
-  forumTopicClosed?: any;
-  forumTopicReopened?: any;
-  generalForumTopicHidden?: any;
-  generalForumTopicUnhidden?: any;
-  videoChatScheduled?: any;
-  videoChatStarted?: any;
-  videoChatEnded?: any;
-  videoChatParticipantsInvited?: any;
-  webAppData?: any;
-  replyMarkup?: InlineKeyboardMarkup;
+  textEntities?: MessageEntity[];
+  animation?: Animation;
 }
 
-export interface InlineQuery {
-  id: string;
-  from: TelegramUser;
-  query: string;
-  offset: string;
-  chatType?: 'sender' | 'private' | 'group' | 'supergroup' | 'channel';
-  location?: Location;
-}
-
-export interface ChosenInlineResult {
-  resultId: string;
-  from: TelegramUser;
-  location?: Location;
-  inlineMessageId?: string;
-  query: string;
-}
-
-export interface CallbackQuery {
-  id: string;
-  from: TelegramUser;
-  message?: Message;
-  inlineMessageId?: string;
-  chatInstance: string;
-  data?: string;
-  gameShortName?: string;
-}
-
-export interface ShippingQuery {
-  id: string;
-  from: TelegramUser;
-  invoicePayload: string;
-  shippingAddress: any;
-}
-
-export interface PreCheckoutQuery {
-  id: string;
-  from: TelegramUser;
-  currency: string;
-  totalAmount: number;
-  invoicePayload: string;
-  shippingOptionId?: string;
-  orderInfo?: any;
-}
-
+// ========== Голосования ==========
 export interface Poll {
   id: string;
   question: string;
@@ -758,6 +359,71 @@ export interface PollAnswer {
   optionIds: number[];
 }
 
+// ========== Inline / Callback ==========
+export interface InlineQuery {
+  id: string;
+  from: TelegramUser;
+  query: string;
+  offset: string;
+  chatType?: 'sender' | 'private' | 'group' | 'supergroup' | 'channel';
+  location?: Location;
+}
+
+export interface ChosenInlineResult {
+  resultId: string;
+  from: TelegramUser;
+  location?: Location;
+  inlineMessageId?: string;
+  query: string;
+}
+
+export interface CallbackQuery {
+  id: string;
+  from: TelegramUser;
+  message?: Message;
+  inlineMessageId?: string;
+  chatInstance: string;
+  data?: string;
+  gameShortName?: string;
+}
+
+// ========== Оплаты ==========
+export interface ShippingQuery {
+  id: string;
+  from: TelegramUser;
+  invoicePayload: string;
+  shippingAddress: any;
+}
+
+export interface PreCheckoutQuery {
+  id: string;
+  from: TelegramUser;
+  currency: string;
+  totalAmount: number;
+  invoicePayload: string;
+  shippingOptionId?: string;
+  orderInfo?: any;
+}
+
+// ========== Обновления ==========
+export interface Update {
+  updateId: number;
+  message?: Message;
+  editedMessage?: Message;
+  channelPost?: Message;
+  editedChannelPost?: Message;
+  inlineQuery?: InlineQuery;
+  chosenInlineResult?: ChosenInlineResult;
+  callbackQuery?: CallbackQuery;
+  shippingQuery?: ShippingQuery;
+  preCheckoutQuery?: PreCheckoutQuery;
+  poll?: Poll;
+  pollAnswer?: PollAnswer;
+  myChatMember?: ChatMemberUpdated;
+  chatMember?: ChatMemberUpdated;
+  chatJoinRequest?: ChatJoinRequest;
+}
+
 export interface ChatMemberUpdated {
   chat: ChatInfo;
   from: TelegramUser;
@@ -776,7 +442,117 @@ export interface ChatJoinRequest {
   inviteLink?: any;
 }
 
-// Конфигурация TelegramService
+// ========== Webhook ==========
+export interface WebhookInfo {
+  url: string;
+  hasCustomCertificate: boolean;
+  pendingUpdateCount: number;
+  ipAddress?: string;
+  lastErrorDate?: number;
+  lastErrorMessage?: string;
+  lastSynchronizationErrorDate?: number;
+  maxConnections?: number;
+  allowedUpdates?: string[];
+}
+
+// ========== Дополнительные ==========
+export interface WebApp {
+  url: string;
+}
+
+export interface LoginUrl {
+  url: string;
+  forwardText?: string;
+  botUsername?: string;
+  requestWriteAccess?: boolean;
+}
+
+export interface KeyboardButtonRequestUser {
+  requestId: number;
+  userIsBot?: boolean;
+  userIsPremium?: boolean;
+}
+
+export interface KeyboardButtonRequestChat {
+  requestId: number;
+  chatIsChannel: boolean;
+  chatIsForum?: boolean;
+  chatHasUsername?: boolean;
+  chatIsCreated?: boolean;
+  userAdministratorRights?: ChatAdministratorRights;
+  botAdministratorRights?: ChatAdministratorRights;
+  botIsMember?: boolean;
+}
+
+export interface ChatAdministratorRights {
+  isAnonymous: boolean;
+  canManageChat: boolean;
+  canDeleteMessages: boolean;
+  canManageVideoChats: boolean;
+  canRestrictMembers: boolean;
+  canPromoteMembers: boolean;
+  canChangeInfo: boolean;
+  canInviteUsers: boolean;
+  canPostMessages?: boolean;
+  canEditMessages?: boolean;
+  canPinMessages?: boolean;
+  canManageTopics?: boolean;
+}
+
+export interface KeyboardButtonPollType {
+  type?: 'quiz' | 'regular';
+}
+
+// ========== Кастомные результаты ==========
+export interface SubscriptionCheckResult {
+  isSubscribed: boolean;
+  status: ChatMember['status'];
+  joinedAt?: number | null;
+  error?: string;
+  channelInfo?: {
+    id: string | number;
+    title: string;
+    type: 'channel' | 'group';
+    memberCount?: number;
+    username?: string;
+  };
+}
+
+export interface BotAddResult {
+  isAdded: boolean;
+  botStatus: ChatMember['status'];
+  permissions: boolean;
+  error?: string;
+  chatInfo?: ChatInfo;
+  addedAt?: number;
+}
+
+export interface ReactionCheckResult {
+  hasReaction: boolean;
+  reactionType?: string | null;
+  error?: string;
+  messageInfo?: {
+    chatId: string | number;
+    messageId: number;
+    reactions: Array<{
+      emoji: string;
+      count: number;
+    }>;
+  };
+}
+
+export interface SendMessageOptions {
+  parseMode?: 'HTML' | 'Markdown' | 'MarkdownV2';
+  entities?: MessageEntity[];
+  disableWebPagePreview?: boolean;
+  disableNotification?: boolean;
+  protectContent?: boolean;
+  replyToMessageId?: number;
+  allowSendingWithoutReply?: boolean;
+  replyMarkup?: InlineKeyboardMarkup | ReplyKeyboardMarkup | ReplyKeyboardRemove | ForceReply;
+}
+
+// ========== Конфигурация ==========
 export interface TelegramServiceConfig {
   botToken: string;
   webhookUrl?: string;
@@ -801,19 +577,19 @@ export interface TelegramServiceConfig {
   };
 }
 
-// Статистика и мониторинг
+// ========== Мониторинг ==========
 export interface TelegramServiceStats {
   requestCount: number;
   errorCount: number;
   successCount: number;
   averageResponseTime: number;
-  lastRequestTime?: Date;
+  lastRequestTime?: number;
   rateLimitHits: number;
   webhookStatus: 'active' | 'inactive' | 'error';
   botStatus: 'running' | 'stopped' | 'error';
 }
 
-// Кастомные ошибки
+// ========== Ошибки ==========
 export class TelegramServiceError extends Error {
   constructor(
     message: string,

@@ -449,4 +449,12 @@ export class TelegramServiceExtended extends TelegramService {
       throw error;
     }
   }
+
+  async checkUserSubscription(userId: number, channelUrl: string): Promise<any> {
+    return this.checkSubscription(userId, channelUrl);
+  }
+
+  async checkUserMembership(userId: number, channelUrl: string): Promise<any> {
+    return this.checkSubscription(userId, channelUrl);
+  }
 }
