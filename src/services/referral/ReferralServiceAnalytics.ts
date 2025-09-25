@@ -1,21 +1,7 @@
 // src/services/referral/ReferralServiceAnalytics.ts
-import { Op } from 'sequelize';
-import { User, Transaction as TransactionModel } from '../../database/models';
-import { 
-  ReferralAnalytics, 
-  ReferralCampaign, 
-  ReferralAchievement, 
-  UserReferralAchievements,
-  ReferralReport,
-  UserLevel
-} from './types';
-import { logger } from '../../utils/logger';
-
-export class ReferralServiceAnalytics {
-// src/services/referral/ReferralServiceAnalytics.ts
 import { Op, QueryTypes } from 'sequelize';
 import { User, Transaction as TransactionModel } from '../../database/models';
-import { sequelize } from '../../database/config';
+import { sequelize } from '../../database/config/database';
 import { 
   ReferralAnalytics, 
   ReferralCampaign, 
@@ -52,7 +38,7 @@ export class ReferralServiceAnalytics {
     // Основная статистика
     const [totalReferrers, totalReferrals, referralTransactions] = await Promise.all([
       User.count({ where: { referralsCount: { [Op.gt]: 0 } } }),
-      User.count({ where: { referrerId: { [Op.not]: null }, ...whereConditions } }),
+      User.count({ where: { referrerId: { [Op.ne]: null }, ...whereConditions } }),
       TransactionModel.findAll({
         where: transactionWhere,
         attributes: ['amount', 'type', 'createdAt', 'userId']
@@ -65,7 +51,7 @@ export class ReferralServiceAnalytics {
     // Конверсия в Premium
     const premiumReferrals = await User.count({
       where: { 
-        referrerId: { [Op.not]: null }, 
+        referrerId: { [Op.ne]: null }, 
         isPremium: true,
         ...whereConditions
       }
@@ -76,14 +62,14 @@ export class ReferralServiceAnalytics {
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
     const referralsOlderThan30Days = await User.count({
       where: {
-        referrerId: { [Op.not]: null },
+        referrerId: { [Op.ne]: null },
         registeredAt: { [Op.lte]: thirtyDaysAgo }
       }
     });
 
     const activeReferralsLast30Days = await User.count({
       where: {
-        referrerId: { [Op.not]: null },
+        referrerId: { [Op.ne]: null },
         registeredAt: { [Op.lte]: thirtyDaysAgo },
         lastActiveAt: { [Op.gte]: thirtyDaysAgo }
       }
@@ -324,7 +310,7 @@ export class ReferralServiceAnalytics {
     // Распределение по уровням
     const levelDistributionQuery = await User.findAll({
       where: { 
-        referrerId: { [Op.not]: null },
+        referrerId: { [Op.ne]: null },
         ...whereConditions
       },
       attributes: [
@@ -415,7 +401,7 @@ export class ReferralServiceAnalytics {
       
       // Находим заработок с этого реферала
       const earnings = referralTransactions
-        .filter(tx => tx.relatedUserId === ref.id)
+        .filter(tx => tx.metadata?.referredUserId === ref.id)
         .reduce((sum, tx) => sum + tx.amount, 0);
       acc[level].earnings += earnings;
       
@@ -450,10 +436,10 @@ export class ReferralServiceAnalytics {
     const topReferrals = referrals
       .map(ref => {
         const earnings = referralTransactions
-          .filter(tx => tx.relatedUserId === ref.id)
+          .filter(tx => tx.metadata?.referredUserId === ref.id)
           .reduce((sum, tx) => sum + tx.amount, 0);
         const activities = referralTransactions
-          .filter(tx => tx.relatedUserId === ref.id && tx.type === 'referral_activity')
+          .filter(tx => tx.metadata?.referredUserId === ref.id && tx.type === 'referral_activity')
           .length;
         
         return {
@@ -480,128 +466,6 @@ export class ReferralServiceAnalytics {
         byActivity
       },
       topReferrals
-    };
-  }
-
-  /**
-   * Получение статистики пользователя для расчета достижений
-   */
-  private async getUserReferralStats(userId: number): Promise<{
-    totalReferrals: number;
-    totalEarned: number;
-    premiumReferrals: number;
-    conversionRate: number;
-  }> {
-    const user = await User.findByPk(userId, {
-      attributes: ['referralsCount', 'premiumReferralsCount']
-    });
-
-    if (!user) {
-      return { totalReferrals: 0, totalEarned: 0, premiumReferrals: 0, conversionRate: 0 };
-    }
-
-    const totalEarned = await TransactionModel.sum('amount', {
-      where: {
-        userId,
-        type: { [Op.in]: ['referral_reward', 'referral_premium_bonus', 'referral_activity'] }
-      }
-    }) || 0;
-
-    const conversionRate = user.referralsCount > 0 
-      ? (user.premiumReferralsCount / user.referralsCount) * 100 
-      : 0;
-
-    return {
-      totalReferrals: user.referralsCount,
-      totalEarned,
-      premiumReferrals: user.premiumReferralsCount,
-      conversionRate
-    };
-  }
-
-  /**
-   * Получение всех достижений
-   */
-  private async getAllAchievements(): Promise<ReferralAchievement[]> {
-    // В реальной реализации это будет запрос к таблице achievements
-    return [
-      {
-        id: 'first_referral',
-        name: 'First Steps',
-        description: 'Invite your first referral',
-        icon: '👶',
-        category: 'referrals',
-        requirements: {
-          type: 'referrals_count',
-          value: 1
-        },
-        rewards: { gram: 100 },
-        rarity: 'common',
-        isHidden: false
-      },
-      {
-        id: 'referral_master',
-        name: 'Referral Master',
-        description: 'Invite 100 referrals',
-        icon: '👑',
-        category: 'referrals',
-        requirements: {
-          type: 'referrals_count',
-          value: 100
-        },
-        rewards: { gram: 10000, title: 'Referral Master' },
-        rarity: 'legendary',
-        isHidden: false
-      },
-      {
-        id: 'first_thousand',
-        name: 'First Thousand',
-        description: 'Earn 1000 GRAM from referrals',
-        icon: '💰',
-        category: 'earnings',
-        requirements: {
-          type: 'total_earned',
-          value: 1000
-        },
-        rewards: { gram: 500 },
-        rarity: 'rare',
-        isHidden: false
-      }
-    ];
-  }
-
-  /**
-   * Расчет прогресса достижения
-   */
-  private calculateAchievementProgress(
-    achievement: ReferralAchievement,
-    userStats: any
-  ): {
-    isCompleted: boolean;
-    currentValue: number;
-    targetValue: number;
-    completedAt?: Date;
-  } {
-    let currentValue = 0;
-    const targetValue = achievement.requirements.value;
-
-    switch (achievement.requirements.type) {
-      case 'referrals_count':
-        currentValue = userStats.totalReferrals;
-        break;
-      case 'total_earned':
-        currentValue = userStats.totalEarned;
-        break;
-      case 'conversion_rate':
-        currentValue = userStats.conversionRate;
-        break;
-    }
-
-    return {
-      isCompleted: currentValue >= targetValue,
-      currentValue,
-      targetValue,
-      completedAt: currentValue >= targetValue ? new Date() : undefined
     };
   }
 
@@ -644,365 +508,3 @@ export class ReferralServiceAnalytics {
     }));
   }
 }
- общей аналитики реферальной системы
-   */
-  async getReferralAnalytics(
-    period?: { from: Date; to: Date }
-  ): Promise<ReferralAnalytics> {
-    const whereConditions: any = {};
-    const transactionWhere: any = {
-      type: { [Op.in]: ['referral_reward', 'referral_premium_bonus', 'referral_activity'] }
-    };
-    
-    if (period) {
-      whereConditions.registeredAt = {
-        [Op.gte]: period.from,
-        [Op.lte]: period.to
-      };
-      transactionWhere.createdAt = {
-        [Op.gte]: period.from,
-        [Op.lte]: period.to
-      };
-    }
-
-    // Основная статистика
-    const [totalReferrers, totalReferrals, referralTransactions] = await Promise.all([
-      User.count({ where: { referralsCount: { [Op.gt]: 0 } } }),
-      User.count({ where: { referrerId: { [Op.not]: null }, ...whereConditions } }),
-      TransactionModel.findAll({
-        where: transactionWhere,
-        attributes: ['amount', 'type', 'createdAt', 'userId']
-      })
-    ]);
-
-    const totalRewardsDistributed = referralTransactions.reduce((sum, tx) => sum + tx.amount, 0);
-    const averageRewardsPerReferrer = totalReferrers > 0 ? totalRewardsDistributed / totalReferrers : 0;
-
-    // Конверсия в Premium
-    const premiumReferrals = await User.count({
-      where: { 
-        referrerId: { [Op.not]: null }, 
-        isPremium: true,
-        ...whereConditions
-      }
-    });
-    const conversionToPremium = totalReferrals > 0 ? (premiumReferrals / totalReferrals) * 100 : 0;
-
-    // Ретенция 30 дней
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-    const referralsOlderThan30Days = await User.count({
-      where: {
-        referrerId: { [Op.not]: null },
-        registeredAt: { [Op.lte]: thirtyDaysAgo }
-      }
-    });
-
-    const activeReferralsLast30Days = await User.count({
-      where: {
-        referrerId: { [Op.not]: null },
-        registeredAt: { [Op.lte]: thirtyDaysAgo },
-        lastActiveAt: { [Op.gte]: thirtyDaysAgo }
-      }
-    });
-
-    const retentionRate30Days = referralsOlderThan30Days > 0 
-      ? (activeReferralsLast30Days / referralsOlderThan30Days) * 100 
-      : 0;
-
-    // Тренды
-    const dailyTrends = await this.getDailyTrends(period);
-    const monthlyTrends = await this.getMonthlyTrends(period);
-
-    // Топ исполнители
-    const topPerformers = await this.getTopPerformers(period);
-
-    // Демография
-    const demographics = await this.getDemographics(period);
-
-    return {
-      overview: {
-        totalReferrers,
-        totalReferrals,
-        totalRewardsDistributed,
-        averageRewardsPerReferrer: Math.round(averageRewardsPerReferrer),
-        conversionToPremium: Math.round(conversionToPremium * 10) / 10,
-        retentionRate30Days: Math.round(retentionRate30Days * 10) / 10
-      },
-      trends: {
-        daily: dailyTrends,
-        monthly: monthlyTrends
-      },
-      topPerformers,
-      demographics
-    };
-  }
-
-  /**
-   * Создание отчета по рефералам пользователя
-   */
-  async generateUserReferralReport(
-    userId: number,
-    period: { from: Date; to: Date }
-  ): Promise<ReferralReport> {
-    // Получаем рефералов пользователя в периоде
-    const referrals = await User.findAll({
-      where: {
-        referrerId: userId,
-        registeredAt: {
-          [Op.gte]: period.from,
-          [Op.lte]: period.to
-        }
-      },
-      attributes: ['id', 'username', 'level', 'isPremium', 'registeredAt', 'totalEarned']
-    });
-
-    // Получаем заработок с рефералов в периоде
-    const referralTransactions = await TransactionModel.findAll({
-      where: {
-        userId,
-        type: { [Op.in]: ['referral_reward', 'referral_premium_bonus', 'referral_activity'] },
-        createdAt: {
-          [Op.gte]: period.from,
-          [Op.lte]: period.to
-        }
-      },
-      attributes: ['amount', 'type', 'createdAt', 'relatedUserId', 'metadata']
-    });
-
-    const totalEarnings = referralTransactions.reduce((sum, tx) => sum + tx.amount, 0);
-    const activeReferrals = referrals.filter(ref => {
-      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
-      return ref.registeredAt >= thirtyDaysAgo;
-    }).length;
-
-    const premiumConversions = referrals.filter(ref => ref.isPremium).length;
-
-    // Разбивка по уровням
-    const byLevel = referrals.reduce((acc, ref) => {
-      const level = ref.level as UserLevel;
-      if (!acc[level]) acc[level] = { count: 0, earnings: 0 };
-      acc[level].count++;
-      
-      // Находим заработок с этого реферала
-      const earnings = referralTransactions
-        .filter(tx => tx.relatedUserId === ref.id)
-        .reduce((sum, tx) => sum + tx.amount, 0);
-      acc[level].earnings += earnings;
-      
-      return acc;
-    }, {} as Record<UserLevel, { count: number; earnings: number }>);
-
-    // Разбивка по неделям
-    const byWeek = this.getWeeklyBreakdown(referrals, referralTransactions, period);
-
-    // Разбивка по активности
-    const taskCompletionRewards = referralTransactions.filter(tx => 
-      tx.type === 'referral_activity' && 
-      tx.metadata?.activityType === 'task_completion'
-    );
-    const topupRewards = referralTransactions.filter(tx => 
-      tx.type === 'referral_activity' && 
-      tx.metadata?.activityType === 'balance_topup'
-    );
-
-    const byActivity = {
-      taskCompletions: {
-        count: taskCompletionRewards.length,
-        earnings: taskCompletionRewards.reduce((sum, tx) => sum + tx.amount, 0)
-      },
-      balanceTopups: {
-        count: topupRewards.length,
-        earnings: topupRewards.reduce((sum, tx) => sum + tx.amount, 0)
-      }
-    };
-
-    // Топ рефералы
-    const topReferrals = referrals
-      .map(ref => {
-        const earnings = referralTransactions
-          .filter(tx => tx.relatedUserId === ref.id)
-          .reduce((sum, tx) => sum + tx.amount, 0);
-        const activities = referralTransactions
-          .filter(tx => tx.relatedUserId === ref.id && tx.type === 'referral_activity')
-          .length;
-        
-        return {
-          id: ref.id,
-          username: ref.username,
-          earnings,
-          activities
-        };
-      })
-      .sort((a, b) => b.earnings - a.earnings)
-      .slice(0, 10);
-
-    return {
-      period,
-      summary: {
-        newReferrals: referrals.length,
-        totalEarnings,
-        activeReferrals,
-        premiumConversions
-      },
-      breakdown: {
-        byLevel,
-        byWeek,
-        byActivity
-      },
-      topReferrals
-    };
-  }
-
-  /**
-   * Получение достижений пользователя
-   */
-  async getUserAchievements(userId: number): Promise<UserReferralAchievements> {
-    const userStats = await this.getUserReferralStats(userId);
-    const allAchievements = await this.getAllAchievements();
-
-    const earned: UserReferralAchievements['earned'] = [];
-    const inProgress: UserReferralAchievements['inProgress'] = [];
-    const available: ReferralAchievement[] = [];
-
-    for (const achievement of allAchievements) {
-      const progress = this.calculateAchievementProgress(achievement, userStats);
-      
-      if (progress.isCompleted) {
-        earned.push({
-          achievement,
-          earnedAt: progress.completedAt || new Date(),
-          progress: progress.currentValue
-        });
-      } else if (progress.currentValue > 0) {
-        inProgress.push({
-          achievement,
-          currentProgress: progress.currentValue,
-          targetProgress: progress.targetValue,
-          progressPercentage: (progress.currentValue / progress.targetValue) * 100
-        });
-      } else if (!achievement.isHidden) {
-        available.push(achievement);
-      }
-    }
-
-    return { earned, inProgress, available };
-  }
-
-  /**
-   * Создание кампании
-   */
-  async createCampaign(campaignData: Omit<ReferralCampaign, 'id' | 'stats'>): Promise<ReferralCampaign> {
-    const campaign: ReferralCampaign = {
-      ...campaignData,
-      id: `campaign_${Date.now()}`,
-      stats: {
-        participants: 0,
-        totalReferrals: 0,
-        rewardsDistributed: 0
-      }
-    };
-
-    // В реальной реализации здесь будет сохранение в БД
-    // await Campaign.create(campaign);
-
-    logger.info(`Referral campaign created: ${campaign.id} - ${campaign.name}`);
-    return campaign;
-  }
-
-  /**
-   * Получение активных кампаний
-   */
-  async getActiveCampaigns(): Promise<ReferralCampaign[]> {
-    const now = new Date();
-    
-    // В реальной реализации будет запрос к БД
-    // const campaigns = await Campaign.findAll({
-    //   where: {
-    //     isActive: true,
-    //     startDate: { [Op.lte]: now },
-    //     endDate: { [Op.gte]: now }
-    //   }
-    // });
-
-    // Заглушка для примера
-    return [];
-  }
-
-  /**
-   * Получение лидерборда
-   */
-  async getLeaderboard(
-    period: 'week' | 'month' | 'all_time',
-    category: 'referrals' | 'earnings' | 'conversion',
-    limit: number = 10
-  ): Promise<Array<{
-    rank: number;
-    user: { id: number; username?: string; level: UserLevel };
-    value: number;
-    change?: number; // Изменение позиции
-  }>> {
-    let dateFilter = {};
-    const now = new Date();
-    
-    switch (period) {
-      case 'week':
-        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-        dateFilter = { registeredAt: { [Op.gte]: weekAgo } };
-        break;
-      case 'month':
-        const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-        dateFilter = { registeredAt: { [Op.gte]: monthAgo } };
-        break;
-    }
-
-    let orderField: string;
-    switch (category) {
-      case 'referrals':
-        orderField = 'referralsCount';
-        break;
-      case 'earnings':
-        orderField = 'totalEarned'; // Потребует JOIN с транзакциями
-        break;
-      case 'conversion':
-        orderField = 'conversionRate'; // Потребует вычисления
-        break;
-      default:
-        orderField = 'referralsCount';
-    }
-
-    const users = await User.findAll({
-      where: { referralsCount: { [Op.gt]: 0 } },
-      attributes: ['id', 'username', 'level', 'referralsCount', 'premiumReferralsCount'],
-      order: [[orderField, 'DESC']],
-      limit
-    });
-
-    return users.map((user, index) => {
-      let value: number;
-      switch (category) {
-        case 'referrals':
-          value = user.referralsCount;
-          break;
-        case 'conversion':
-          value = user.referralsCount > 0 
-            ? (user.premiumReferralsCount / user.referralsCount) * 100 
-            : 0;
-          break;
-        default:
-          value = 0; // Для earnings потребуется дополнительный запрос
-      }
-
-      return {
-        rank: index + 1,
-        user: {
-          id: user.id,
-          username: user.username,
-          level: user.level as UserLevel
-        },
-        value: Math.round(value * 10) / 10
-      };
-    });
-  }
-
-  /**
-   * Получ

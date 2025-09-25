@@ -16,13 +16,13 @@ import {
 } from './types';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { generatePaymentId } from '../../utils/helpers';
+import { PaymentUtils } from '../../services/payment/PaymentUtils';
 import { sequelize } from '../../database/models';
 
 export class PaymentService {
   constructor(
-    private userService: UserService,
-    private notificationService: NotificationService
+    protected userService: UserService,
+    protected notificationService: NotificationService
   ) {}
 
   /**
@@ -56,7 +56,7 @@ export class PaymentService {
         description: paymentData.description || this.getDefaultDescription(paymentData.type, paymentData.amount),
         externalId: paymentId,
         paymentProvider: paymentData.method,
-        status: 'pending',
+        status: PaymentStatus.PENDING,
         metadata: {
           method: paymentData.method,
           packageId: paymentData.packageId,
@@ -90,7 +90,7 @@ export class PaymentService {
         externalId: paymentId,
         amount: paymentData.amount,
         method: paymentData.method,
-        status: 'pending',
+        status: PaymentStatus.PENDING,
         paymentUrl,
         expiresAt: new Date(Date.now() + 30 * 60 * 1000) // 30 минут
       };
@@ -514,7 +514,7 @@ export class PaymentService {
   /**
    * Создание URL для оплаты
    */
-  private async createPaymentUrl(
+  protected async createPaymentUrl(
     payment: TransactionModel,
     paymentData: PaymentCreateData,
     transaction: Transaction
@@ -570,7 +570,7 @@ export class PaymentService {
     const maxAttempts = 10;
 
     while (attempts < maxAttempts) {
-      const paymentId = generatePaymentId();
+      const paymentId = PaymentUtils.generatePaymentId();
       const existingPayment = await TransactionModel.findOne({
         where: { externalId: paymentId }
       });
@@ -588,7 +588,7 @@ export class PaymentService {
   /**
    * Выполнение операции в транзакции
    */
-  private async executeInTransaction<T>(
+  protected async executeInTransaction<T>(
     transaction: Transaction | undefined,
     operation: (t: Transaction) => Promise<T>
   ): Promise<T> {

@@ -2,8 +2,8 @@
 import { Transaction, Op } from 'sequelize';
 import { User, Transaction as TransactionModel, TaskExecution } from '../../database/models';
 import { UserService } from '../user';
-import { TransactionService } from '../transaction';
-import { NotificationService } from '../notification';
+import { TransactionService } from '../transaction/TransactionService';
+import { NotificationService } from '../notification/NotificationService';
 import { 
   ReferralReward,
   ReferralStats,
@@ -15,7 +15,7 @@ import {
   REFERRAL_REWARDS, 
   REFERRAL_BONUS_PERCENTAGE,
   REFERRAL_LEVELS 
-} from '../../utils/constants';
+} from '../../utils/constants/index';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 
@@ -77,7 +77,7 @@ export class ReferralService {
         userId: referrer.id,
         type: 'referral_reward',
         amount: reward,
-        relatedUserId: newUserId,
+        relatedTaskId: newUserId,
         description: `Referral registration reward from @${await this.getUsernameById(newUserId)}`,
         metadata: { referralType: 'registration', referredUserId: newUserId }
       }, t);
@@ -145,7 +145,7 @@ export class ReferralService {
         userId: referrer.id,
         type: 'referral_premium_bonus',
         amount: premiumBonus,
-        relatedUserId: userId,
+        relatedTaskId: userId,
         description: `Premium upgrade bonus from referral`,
         metadata: { referralType: 'premium_upgrade', referredUserId: userId }
       }, t);
@@ -583,7 +583,7 @@ export class ReferralService {
       userId: referrerId,
       type: 'referral_activity',
       amount: reward,
-      relatedUserId: referralId,
+      relatedTaskId: referralId,
       description: `Referral ${activityType} bonus`,
       metadata: { 
         referralType: 'activity', 
@@ -652,7 +652,7 @@ export class ReferralService {
       return await operation(transaction);
     }
 
-    const { sequelize } = User;
+    const { sequelize } = require('../../database/models');
     return await sequelize.transaction(operation);
   }
 }

@@ -17,7 +17,7 @@ import {
 } from './types';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
-import { generateQRCode } from '../../utils/helpers/init';
+import { generateCheckQRCode } from '../../utils/helpers/init';
 import { Sequelize } from 'sequelize';
 
 export class CheckServiceExtended extends CheckService {
@@ -267,7 +267,11 @@ export class CheckServiceExtended extends CheckService {
     
     // Генерируем QR код
     const shareUrl = `https://t.me/prgram_bot?start=check_${check.code}`;
-    const qrCode = await generateQRCode(shareUrl);
+    const qrCode = await generateCheckQRCode(check.code, 'prgram_bot', {
+      amount: check.totalAmount,
+      comment: check.comment,
+      theme: 'gram'
+    });
 
     return {
       check,

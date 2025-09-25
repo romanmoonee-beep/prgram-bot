@@ -22,15 +22,16 @@ import {
   ExchangeRate,
   PaymentMethod,
   PaymentStatus,
-  Currency
+  Currency,
+  PaymentType
 } from './types';
 import { AppError } from '../../utils/errors';
 import { logger } from '../../utils/logger';
 
 export class PaymentServiceExtended extends PaymentService {
-  private providerConfig: PaymentProviderConfig;
-  private exchangeRates: Map<string, ExchangeRate> = new Map();
-  private fraudThreshold: number = 80; // Risk score threshold
+  protected providerConfig: PaymentProviderConfig;
+  protected exchangeRates: Map<string, ExchangeRate> = new Map();
+  protected fraudThreshold: number = 80; // Risk score threshold
 
   constructor(
     userService: UserService,
@@ -132,7 +133,7 @@ export class PaymentServiceExtended extends PaymentService {
           return {
             success: true,
             paymentId: payment.id,
-            status: 'completed',
+            status: PaymentStatus.COMPLETED,
             amount: payment.amount
           };
         }
@@ -148,7 +149,7 @@ export class PaymentServiceExtended extends PaymentService {
           return {
             success: true,
             paymentId: payment.id,
-            status: 'failed',
+            status: PaymentStatus.FAILED,
             message: 'Payment marked as failed'
           };
         }
@@ -232,7 +233,7 @@ export class PaymentServiceExtended extends PaymentService {
       // Создаем первый платеж
       await this.createPayment(userId, {
         method: PaymentMethod.TELEGRAM_STARS,
-        type: 'subscription',
+        type: PaymentType.SUBSCRIPTION,
         amount: package_.gramAmount,
         packageId,
         description: `Subscription payment for ${package_.name}`
@@ -654,7 +655,13 @@ export class PaymentServiceExtended extends PaymentService {
 
     return {
       period,
-      summary: analytics.overview,
+      summary: {
+        totalPayments: analytics.overview.paymentsCount,
+        totalRevenue: analytics.overview.totalRevenue,
+        averagePayment: analytics.overview.averagePayment,
+        successRate: analytics.overview.successRate,
+        topMethod: analytics.overview.topPaymentMethod
+      },
       breakdown: {
         byMethod: analytics.methods.reduce((acc, method) => {
           acc[method.method] = {
@@ -925,14 +932,18 @@ export class PaymentServiceExtended extends PaymentService {
       }
       
       return acc;
-    }, {} as Record<string, any>);
+    }, {} as Record<string, {
+      payments: number;
+      revenue: number;
+      successfulPayments: number;
+    }>);
 
     return Object.entries(methodStats).map(([method, stats]) => ({
       method: method as PaymentMethod,
-      payments: stats.payments,
-      revenue: stats.revenue,
-      successRate: stats.payments > 0 ? (stats.successfulPayments / stats.payments) * 100 : 0,
-      averageAmount: stats.successfulPayments > 0 ? stats.revenue / stats.successfulPayments : 0
+      payments: (stats as any).payments,
+      revenue: (stats as any).revenue,
+      successRate: (stats as any).payments > 0 ? ((stats as any).successfulPayments / (stats as any).payments) * 100 : 0,
+      averageAmount: (stats as any).successfulPayments > 0 ? (stats as any).revenue / (stats as any).successfulPayments : 0
     }));
   }
 
@@ -1000,20 +1011,5 @@ export class PaymentServiceExtended extends PaymentService {
       averageLifetimeValue: Math.round(parseFloat(avgLifetimeValue[0]?.avg_ltv || 0)),
       churnRate: 0 // Потребует более сложных расчетов
     };
-  }
-
-  /**
-   * Выполнение операции в транзакции
-   */
-  private async executeInTransaction<T>(
-    transaction: Transaction | undefined,
-    operation: (t: Transaction) => Promise<T>
-  ): Promise<T> {
-    if (transaction) {
-      return await operation(transaction);
-    }
-
-    const { sequelize } = TransactionModel;
-    return await sequelize.transaction(operation);
   }
 }

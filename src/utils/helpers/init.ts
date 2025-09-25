@@ -1,5 +1,8 @@
 // src/utils/helpers.ts
 import { REGEX, USER_LEVELS, EMOJIS } from '../constants/index';
+import QRCode from 'qrcode';
+import { logger } from '../../utils/logger';
+import AppError from '../errors';
 
 // Функция для форматирования числа с разделителями
 export function formatNumber(num: number): string {
@@ -345,6 +348,157 @@ export function hashPassword(password: string): string {
 // Функция для проверки пароля
 export function validatePasswordHash(password: string, hash: string): boolean {
   return hashPassword(password) === hash;
+}
+
+// Функция для генерации QR кода
+export async function generateQRCode(
+  text: string, 
+  options?: {
+    width?: number;
+    margin?: number;
+    color?: {
+      dark?: string;
+      light?: string;
+    };
+    errorCorrectionLevel?: 'L' | 'M' | 'Q' | 'H';
+  }
+): Promise<string> {
+  try {
+    // Динамический импорт для избежания проблем с SSR
+    const QRCode = await import('qrcode');
+    
+    const defaultOptions = {
+      type: 'image/png' as const,
+      quality: 0.92,
+      margin: options?.margin ?? 2,
+      width: options?.width ?? 256,
+      color: {
+        dark: options?.color?.dark ?? '#000000',
+        light: options?.color?.light ?? '#FFFFFF'
+      },
+      errorCorrectionLevel: options?.errorCorrectionLevel ?? 'M' as const
+    };
+
+    return await QRCode.toDataURL(text, defaultOptions);
+  } catch (error) {
+    logger.error('Failed to generate QR code', { error, text });
+    
+    // Fallback - возвращаем простое base64 изображение с ошибкой
+    const errorSvg = `
+      <svg width="256" height="256" xmlns="http://www.w3.org/2000/svg">
+        <rect width="256" height="256" fill="#f8f9fa" stroke="#dee2e6" stroke-width="2"/>
+        <text x="128" y="120" font-family="Arial" font-size="14" text-anchor="middle" fill="#6c757d">
+          QR Code
+        </text>
+        <text x="128" y="140" font-family="Arial" font-size="14" text-anchor="middle" fill="#6c757d">
+          Generation Failed
+        </text>
+      </svg>
+    `;
+    
+    const base64 = Buffer.from(errorSvg).toString('base64');
+    return `data:image/svg+xml;base64,${base64}`;
+  }
+}
+
+// Специальная функция для генерации QR кодов чеков с брендингом
+export async function generateCheckQRCode(
+  checkCode: string,
+  botUsername: string = 'prgram_bot',
+  options?: {
+    amount?: number;
+    comment?: string;
+    theme?: 'light' | 'dark' | 'gram';
+  }
+): Promise<string> {
+  const shareUrl = `https://t.me/${botUsername}?start=check_${checkCode}`;
+  
+  // Настройки темы
+  const themes = {
+    light: { dark: '#000000', light: '#FFFFFF' },
+    dark: { dark: '#FFFFFF', light: '#000000' },
+    gram: { dark: '#1a73e8', light: '#f8f9ff' }
+  };
+  
+  const theme = themes[options?.theme || 'gram'];
+  
+  try {
+    return await generateQRCode(shareUrl, {
+      width: 300,
+      margin: 3,
+      color: theme,
+      errorCorrectionLevel: 'M'
+    });
+  } catch (error) {
+    logger.error('Failed to generate check QR code', { 
+      error, 
+      checkCode, 
+      shareUrl 
+    });
+    throw new Error('QR code generation failed');
+  }
+}
+
+// Функция для генерации QR кода с логотипом (требует canvas)
+export async function generateQRCodeWithLogo(
+  text: string,
+  logoPath?: string,
+  options?: {
+    size?: number;
+    logoSize?: number;
+  }
+): Promise<string> {
+  try {
+    const QRCode = await import('qrcode');
+    const { createCanvas, loadImage } = await import('canvas');
+    
+    const size = options?.size || 300;
+    const logoSize = options?.logoSize || 60;
+    
+    // Генерируем QR код
+    const qrCodeDataUrl = await QRCode.toDataURL(text, {
+      width: size,
+      margin: 2,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      },
+      errorCorrectionLevel: 'M'
+    });
+    
+    // Создаем canvas
+    const canvas = createCanvas(size, size);
+    const ctx = canvas.getContext('2d');
+    
+    // Рисуем QR код
+    const qrImage = await loadImage(qrCodeDataUrl);
+    ctx.drawImage(qrImage, 0, 0, size, size);
+    
+    // Добавляем логотип если указан
+    if (logoPath) {
+      try {
+        const logo = await loadImage(logoPath);
+        const logoX = (size - logoSize) / 2;
+        const logoY = (size - logoSize) / 2;
+        
+        // Белый фон под логотипом
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(logoX - 5, logoY - 5, logoSize + 10, logoSize + 10);
+        
+        // Рисуем логотип
+        ctx.drawImage(logo, logoX, logoY, logoSize, logoSize);
+      } catch (logoError) {
+        logger.warn('Failed to load logo for QR code', { logoError, logoPath });
+      }
+    }
+    
+    return canvas.toDataURL('image/png');
+    
+  } catch (error) {
+    logger.error('Failed to generate QR code with logo', { error, text });
+    // Fallback на обычный QR код
+    return await generateQRCode(text, { width: options?.size });
+  }
 }
 
 export default {

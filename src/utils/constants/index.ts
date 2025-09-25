@@ -235,6 +235,27 @@ export const TIME = {
   STATS_UPDATE_INTERVAL: 10 * 60 * 1000 // 10 минут
 } as const;
 
+// Реферальные награды
+export const REFERRAL_REWARDS = {
+  bronze: 1000,
+  silver: 1500,
+  gold: 2000,
+  premium: 3000
+} as const;
+
+export const REFERRAL_BONUS_PERCENTAGE = {
+  bronze: { task_completion: 5, balance_topup: 10 },
+  silver: { task_completion: 7, balance_topup: 12 },
+  gold: { task_completion: 10, balance_topup: 15 },
+  premium: { task_completion: 15, balance_topup: 20 }
+} as const;
+
+export const REFERRAL_LEVELS = {
+  DIRECT: 1,
+  SECOND: 2,
+  THIRD: 3
+} as const;
+
 export default {
   EMOJIS,
   TEXTS,

@@ -3,8 +3,8 @@ import { ReferralService } from './ReferralService';
 import { ReferralServiceExtended } from './ReferralServiceExtended';
 import { ReferralServiceAnalytics } from './ReferralServiceAnalytics';
 import { UserService } from '../user';
-import { TransactionService } from '../transaction';
-import { NotificationService } from '../notification';
+import { TransactionService } from '../transaction/TransactionService';
+import { NotificationService } from '../notification/NotificationService';
 
 // Экспорт всех типов
 export * from './types';
