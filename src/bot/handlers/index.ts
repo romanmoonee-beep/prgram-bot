@@ -1,4 +1,4 @@
-// src/bot/handlers/index.ts
+// src/bot/handlers/index.ts - ИСПРАВЛЕННАЯ ВЕРСИЯ
 import { Bot } from 'grammy';
 import { logger } from '../../utils/logger';
 
@@ -6,10 +6,13 @@ import { logger } from '../../utils/logger';
 import { setupStartHandler } from './start';
 import { setupCabinetHandlers } from './cabinet';
 import { setupEarnHandlers } from './earn';
-import { setupTaskExecutionHandlers } from './taskExecution';
+import { setupTaskExecutionHandlers, setupTaskModerationHandlers } from './taskExecution';
 import { setupAdvertiseHandlers, setupTaskCreationTextHandlers, setupTaskCreationFinalHandlers } from './advertise';
 import { setupChecksHandlers, setupCheckTextHandlers, setupCheckCreationConfirmHandlers } from './checks';
 import { setupReferralsHandlers } from './referrals';
+import { setupPaymentHandlers } from './payment';
+import { setupAdminHandlers } from './admin';
+import { setupSubscriptionCheckHandlers, setupSubscriptionCommands, setupNewMemberHandler } from './subscriptionCheck';
 
 // Функция для настройки всех обработчиков
 export function setupHandlers(bot: Bot) {
@@ -23,6 +26,7 @@ export function setupHandlers(bot: Bot) {
     // Модуль заработка
     setupEarnHandlers(bot);
     setupTaskExecutionHandlers(bot);
+    setupTaskModerationHandlers(bot); // Добавляем обработчики модерации
     
     // Модуль рекламы
     setupAdvertiseHandlers(bot);
@@ -36,6 +40,17 @@ export function setupHandlers(bot: Bot) {
     
     // Реферальная система
     setupReferralsHandlers(bot);
+
+    // Платежная система
+    setupPaymentHandlers(bot);
+
+    // Админская панель
+    setupAdminHandlers(bot);
+
+    // Система проверки подписки
+    setupSubscriptionCheckHandlers(bot);
+    setupSubscriptionCommands(bot);
+    setupNewMemberHandler(bot);
 
     // Обработчик помощи
     bot.callbackQuery('help', async (ctx) => {
@@ -108,19 +123,25 @@ export function setupHandlers(bot: Bot) {
         if (user) {
           user.currentState = null;
           await user.save();
+          
+          await logger.userAction(user.telegramId, 'action_cancelled');
         }
 
         await ctx.answerCallbackQuery('✅ Действие отменено');
         
-        // Возвращаемся в главное меню
-        setTimeout(() => {
-          bot.handleUpdate({
-            ...ctx.update,
-            callback_query: {
-              ...ctx.update.callback_query!,
-              data: 'main_menu'
-            }
-          });
+        // Возвращаемся в главное меню через небольшую задержку
+        setTimeout(async () => {
+          try {
+            await ctx.editMessageText(
+              '🏠 **Главное меню**\n\nВыберите действие:',
+              {
+                reply_markup: { inline_keyboard: [[{ text: '🏠 Главное меню', callback_data: 'main_menu' }]] },
+                parse_mode: 'Markdown'
+              }
+            );
+          } catch (error) {
+            logger.error('Cancel redirect error:', error);
+          }
         }, 1000);
 
       } catch (error) {
@@ -144,6 +165,10 @@ export function setupHandlers(bot: Bot) {
           return;
         }
 
+        await logger.userAction(user.telegramId, 'unknown_command', { 
+          command: ctx.message.text 
+        });
+
         await ctx.reply(
           '❓ Неизвестная команда.\n\n' +
           'Доступные команды:\n' +
@@ -165,15 +190,18 @@ export function setupHandlers(bot: Bot) {
       await next();
     });
 
-    // Базовый обработчик callback запросов
+    // Обработчик необработанных callback запросов
     bot.on('callback_query', async (ctx, next) => {
-      // Если callback не был обработан, уведомляем пользователя
-      if (!ctx.callbackQuery.message) {
-        await ctx.answerCallbackQuery('🔄 Функция в разработке');
-        return;
+      try {
+        await next();
+      } catch (error) {
+        logger.error('Unhandled callback query error:', error, {
+          userId: ctx.from?.id,
+          data: ctx.callbackQuery.data
+        });
+        
+        await ctx.answerCallbackQuery('Произошла ошибка. Попробуйте позже.');
       }
-      
-      await next();
     });
 
     // Обработчик для всех необработанных callback_query
@@ -182,6 +210,12 @@ export function setupHandlers(bot: Bot) {
         userId: ctx.from?.id,
         data: ctx.callbackQuery.data
       });
+      
+      if (ctx.session?.user) {
+        await logger.userAction(ctx.session.user.telegramId, 'unhandled_callback', {
+          data: ctx.callbackQuery.data
+        });
+      }
       
       await ctx.answerCallbackQuery('🔄 Функция в разработке или недоступна');
     });
@@ -197,23 +231,44 @@ export function setupHandlers(bot: Bot) {
 // Дополнительная функция для обработки ошибок в боте
 export function setupErrorHandlers(bot: Bot) {
   // Глобальный обработчик ошибок
-  bot.catch((err) => {
+  bot.catch(async (err) => {
     const ctx = err.ctx;
     const error = err.error;
     
-    logger.error('Bot error occurred:', error, {
+    logger.botError('Bot error occurred', error, {
       updateId: ctx.update.update_id,
       userId: ctx.from?.id,
       username: ctx.from?.username,
       chatId: ctx.chat?.id
     });
 
+    // Логируем действие пользователя если доступно
+    if (ctx.session?.user) {
+      await logger.userAction(ctx.session.user.telegramId, 'bot_error', {
+        error: error.message,
+        updateId: ctx.update.update_id
+      });
+    }
+
     // Пытаемся отправить сообщение об ошибке пользователю
     try {
       if (ctx.callbackQuery) {
-        ctx.answerCallbackQuery('Произошла ошибка. Попробуйте позже.');
+        await ctx.answerCallbackQuery('❌ Произошла ошибка. Попробуйте позже.');
       } else {
-        ctx.reply('❌ Произошла ошибка. Попробуйте позже или обратитесь в поддержку.');
+        await ctx.reply(
+          '❌ Произошла техническая ошибка.\n\n' +
+          'Попробуйте:\n' +
+          '• Повторить действие через несколько секунд\n' +
+          '• Перезапустить бота командой /start\n' +
+          '• Обратиться в поддержку @prgram_support',
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: '🔄 Перезапуск', callback_data: 'main_menu' }
+              ]]
+            }
+          }
+        );
       }
     } catch (replyError) {
       logger.error('Failed to send error message to user:', replyError);
@@ -233,4 +288,40 @@ export function setupErrorHandlers(bot: Bot) {
   logger.info('✅ Error handlers configured');
 }
 
-export default setupHandlers;// src/bot/handlers/cabinet.ts
+// Функция для инициализации фоновых задач
+export async function setupBackgroundJobs() {
+  try {
+    // Инициализируем QueueManager
+    const { QueueManager } = await import('../../jobs/queues');
+    QueueManager.initialize();
+
+    // Запускаем задачи очистки каждые 6 часов
+    setInterval(async () => {
+      try {
+        await QueueManager.addCleanupTask({ type: 'expired_tasks' });
+        await QueueManager.addCleanupTask({ type: 'old_notifications' });
+        await QueueManager.addCleanupTask({ type: 'inactive_checks' });
+        
+        logger.info('Background cleanup tasks scheduled');
+      } catch (error) {
+        logger.error('Failed to schedule cleanup tasks:', error);
+      }
+    }, 6 * 60 * 60 * 1000); // 6 часов
+
+    // Очистка завершенных задач в очереди каждые 24 часа  
+    setInterval(async () => {
+      try {
+        await QueueManager.cleanCompletedJobs();
+        logger.info('Completed queue jobs cleaned');
+      } catch (error) {
+        logger.error('Failed to clean completed jobs:', error);
+      }
+    }, 24 * 60 * 60 * 1000); // 24 часа
+
+    logger.info('✅ Background jobs configured');
+  } catch (error) {
+    logger.error('❌ Failed to setup background jobs:', error);
+  }
+}
+
+export default setupHandlers;
